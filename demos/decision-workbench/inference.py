@@ -63,7 +63,8 @@ def model_status():
             detail = "Local snapshot ready; first inference loads model into CPU memory."
         statuses.append({"id": model_id, "name": spec["name"], "available": available, "detail": detail})
     from adapter import adapter_status
-    return statuses + [adapter_status()]
+    from jev import jev_status
+    return statuses + [adapter_status(), jev_status()]
 
 
 def _load(model_id):
@@ -146,6 +147,9 @@ def _task_parts(task):
 
 def infer(model_id, task):
     """Return JSON-safe results; missing setup and model errors never crash the portal."""
+    if model_id == 'jev':
+        from jev import infer_jev
+        return infer_jev(task)
     if model_id == 'llm-adapter':
         from adapter import infer_adapter
         return infer_adapter(task)

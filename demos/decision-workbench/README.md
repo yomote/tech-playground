@@ -1,6 +1,6 @@
 # Decision Workbench
 
-ModernBERT、GLiClass、既存のCodex環境または任意のLLM APIへ同じ問い・判断基準・選択肢を渡し、「小さな判断」を比較するDemoです。LLM接続にはTypeSafe公式のSystem One Adapterを使います。日本語と英語の6組、計12件のfixtureから始め、本文や選択肢を編集して比較します。
+ModernBERT、GLiClass、既存のCodex環境または任意のLLM API、Jevへ同じ問い・判断基準・選択肢を渡し、「小さな判断」を比較するDemoです。一般LLM接続にはTypeSafe公式のSystem One Adapter、Jevへの直接接続には公式TypeSafe SDKを使います。日本語と英語の6組、計12件のfixtureから始め、本文や選択肢を編集して比較します。
 
 ## What I want to understand
 
@@ -21,6 +21,7 @@ React + Material UI editor / fixture comparison
       → local ModernBERT inference
       → local GLiClass inference
       → optional System One Adapter → existing Codex CLI / configured LLM API
+      → optional TypeSafe SDK → Jev API (direct)
     → per-model scores, selected option, timing, run JSON
 ```
 
@@ -39,7 +40,7 @@ ModernBERT側は`ModernBERT-Large-Instruct`のmasked-language-model headに選�
 
 `fixtures.json`の`expectedOptionId`と`rationale`は人間が書いた比較用の参考回答です。モデルが生成した説明や検証済みのbenchmark結果ではありません。`basis: text`は本文の明示情報、`basis: knowledge`は一般知識が必要な問いを表します。本文・問い・基準・選択肢を変更した場合、元fixtureの期待値をそのまま正解として扱いません。
 
-1回に最大12入力、各2〜4候補、最大3実行対象を指定できます。処理は順番に実行します。推論中にローカルモデルは自動ダウンロードしません。導入不足や推論失敗は各モデルのエラーとして扱い、架空の成功結果へ置き換えません。Demoの入力上限はModernBERT 1,024 tokens、GLiClass 512 tokensで、長すぎる入力は黙って切り詰めずエラーにします。実行記録は`runs/`へJSONで保存します。
+1回に最大12入力、各2〜4候補、複数の実行対象を指定できます。処理は順番に実行します。推論中にローカルモデルは自動ダウンロードしません。導入不足や推論失敗は各モデルのエラーとして扱い、架空の成功結果へ置き換えません。Demoの入力上限はModernBERT 1,024 tokens、GLiClass 512 tokensで、長すぎる入力は黙って切り詰めずエラーにします。実行記録は`runs/`へJSONで保存します。
 
 ## Run
 
@@ -74,6 +75,28 @@ pnpm demo:dev decision-workbench
 固定snapshotの合計は約1.45 GiBです。今回のWindows環境ではsymlinkを使えずcacheに重複が生じ、`.cache/huggingface/`全体は約2.18 GiBでした。`.venv`の容量は別に必要です。
 
 UI: http://localhost:5177 （接続できなければ http://127.0.0.1:5177）。初回読み込みとwarmな推論は所要時間が異なります。メモリを抑えるため、モデル切り替え時は前のweightsを解放します。CPU、候補数、文章の長さにも左右されるため、異なる条件の時間をそのまま性能比較にしないでください。
+
+### 任意: Jev APIへの直接接続
+
+キーを貼る場所は **`demos/decision-workbench/.env`** です。`.env`がまだなければ`.env.example`をコピーし、既存ファイルがあれば次の2項目だけを追記・更新してください。既存の`DEMO_LLM_*`設定はそのまま残せます。
+
+```dotenv
+TYPESAFE_API_KEY=ここにTypeSafeのAPIキーを設定
+TYPESAFE_MODEL=jev-latest
+```
+
+Demo用venvへ任意の依存を追加します。Jevだけを試す場合、PyTorchやローカルweightsは不要です。
+
+```powershell
+cd demos/decision-workbench
+.venv/Scripts/python -m pip install -r requirements-jev.txt
+```
+
+Linuxでは`.venv/bin/python`を使います。設定後はDemo serverを再起動し、画面で`jev`を選びます。Python側の公式`AsyncTypeSafeClient`が、`TYPESAFE_MODEL`を明示して公式Jev endpointへ直接要求します。この経路にSystem One AdapterやCodexは入りません。
+
+Jevを利用できるTypeSafeアカウントとAPIキーが必要です。入力文・問い・基準・候補はTypeSafeへ送信されます。キーはDemoの`.env`へ保存し、ブラウザ、git、run JSONへ含めません。未設定・アクセス不可の場合はsetup不足またはエラーを表示し、他の実行対象には影響しません。
+
+**Jevへの実接続は未確認です。** 設定方法と直接接続経路の追加を、判定結果や速度の検証と混同しません。表示時間はネットワークを含むAPI往復時間であり、Jev内部の純粋なモデル推論時間ではありません。Jevが返すscoreも、ローカルsoftmaxやLLMの自己申告分布と同一の尺度とみなさず、このfixtureでの選択結果を確認します。
 
 ### 任意: System One Adapterと既存LLM
 
@@ -116,6 +139,7 @@ python -m unittest -v test_contract test_adapter test_codex_provider
 5. 候補のlabelだけでなくdescriptionを編集する。長い説明で判定が改善するか、別の意味へ引っ張られるかを見る。
 6. 期待値が外れたrunのJSONを残す。入力言語、選択肢、モデル、初回/再実行を揃えて再現し、`Findings`へ観察条件とともに追記する。
 7. LLM APIを設定したら`llm-adapter`で同じfixtureを試す。adapterのChoice分布とローカルのsoftmaxを区別し、選択結果・待ち時間・エラーを比較する。
+8. Jevのキーを設定したら`jev`で同じfixtureを試す。直接Jevを呼んだ結果と、一般LLMをadapter経由で呼んだ結果を分けて記録する。外部APIの往復時間をローカルの純粋な推論時間と同一条件の速度比較にしない。
 
 ## Findings
 
@@ -153,6 +177,7 @@ Adapterの要求は60秒でタイムアウトします。Codexのキャンセル
 - [GLiClass usage documentation](https://docs.knowledgator.com/docs/frameworks/gliclass/usage/)
 - [GLiClass-Instruct Base official model card](https://huggingface.co/knowledgator/gliclass-instruct-base-v1.0)
 - [TypeSafe official System One Adapter](https://github.com/typesafe-ai/system-one-adapter-python)
+- [TypeSafe official documentation](https://docs.typesafe.ai/)
 - [Codex non-interactive execution](https://developers.openai.com/codex/noninteractive)
 - [Codex authentication](https://developers.openai.com/codex/auth)
 

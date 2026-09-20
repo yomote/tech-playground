@@ -25,7 +25,7 @@ pnpm demo:dev decision-workbench
 | [MCP Apps Playground](demos/mcp-apps-playground/README.md) | http://localhost:5174 | Real MCP / Apps bridge + mock experiment results | External MCP Apps host |
 | [MAF Magentic Scrum](demos/maf-magentic-scrum/README.md) | http://localhost:5175 | Scripted mock agents + actual Python fixture tests | Python SDK + OpenAI API key for live Magentic |
 | [OpenFGA Sharing Playground](demos/openfga-sharing-playground/README.md) | http://localhost:5176 | Local mock authorization evaluator | Docker OpenFGA for live checks |
-| [Decision Workbench](demos/decision-workbench/README.md) | http://localhost:5177 | System One Adapter / configured LLM, with local ModernBERT / GLiClass comparison | Dedicated Python venv; adapter needs LLM API configuration, local models need public downloads |
+| [Decision Workbench](demos/decision-workbench/README.md) | http://localhost:5177 | Direct Jev API / System One Adapter / local ModernBERT / GLiClass comparison | Dedicated Python venv; Jev needs TYPESAFE_API_KEY; Codex/API and local models are optional comparisons |
 
 各DemoのOpen Demoリンクは起動を代行しません。先に対応commandを実行してください。各serverはloopbackでlistenします。初期データとmock/liveの区別はUIにも表示します。
 
@@ -126,7 +126,7 @@ cd demos/maf-magentic-scrum
 python -m unittest -v test_runner
 # Decision Workbench directoryでは、モデル取得なしでAPI/fixtureを検証:
 cd ../decision-workbench
-python -m unittest -v test_contract test_adapter test_codex_provider
+python -m unittest -v test_contract test_adapter test_codex_provider test_jev
 ```
 
 任意のintegration checks（Demo server起動後）:
@@ -143,7 +143,7 @@ OpenFGAの実server検証には、Dockerのない環境で公式Windows binary *
 
 credentialやDockerがなくてもroot install/build/typecheck/lintとPortalは利用可能です。Python依存はpnpm installから導入しません。MAF mockは標準ライブラリだけ、live dependenciesはそのDemoのrequirements.txtから任意で導入します。
 
-Decision Workbenchは専用venvで、System One Adapter用のLLM API設定、またはローカルモデルのダウンロードを行います。[Demoのセットアップ手順](demos/decision-workbench/README.md#run)を参照してください。AdapterはJevと同じ形式で通常のLLMを呼ぶもので、Jev本体ではありません。未設定でも画面は開け、架空の判定結果へフォールバックせず準備状況を表示します。
+Decision WorkbenchのJev本体は`demos/decision-workbench/.env`の`TYPESAFE_API_KEY`で接続します。比較用のSystem One Adapter/Codexやローカルモデルは独立した任意設定です。[Demoのセットアップ手順](demos/decision-workbench/README.md#run)を参照してください。AdapterはJevと同じ形式で通常のLLMを呼ぶもので、Jev本体ではありません。未設定でも画面は開け、架空の判定結果へフォールバックせず準備状況を表示します。
 
 ## Scope and limitations
 

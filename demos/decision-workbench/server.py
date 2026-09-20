@@ -11,7 +11,7 @@ import threading
 import uuid
 
 ROOT = Path(__file__).resolve().parent
-MODEL_IDS = ('modernbert', 'gliclass', 'llm-adapter')
+MODEL_IDS = ('modernbert', 'gliclass', 'llm-adapter', 'jev')
 MODES = ('classification', 'criteria', 'sufficiency')
 TASK_FIELDS = ('mode', 'language', 'text', 'question', 'criteria', 'options')
 runs: dict[str, dict] = {}
@@ -75,7 +75,7 @@ def validate_request(data) -> dict:
     if not isinstance(inputs, list) or not 1 <= len(inputs) <= 12:
         raise ValueError('Provide 1 to 12 inputs')
     if not isinstance(models, list) or not 1 <= len(models) <= len(MODEL_IDS) or any(not isinstance(model, str) or model not in MODEL_IDS for model in models):
-        raise ValueError('Select modernbert, gliclass and/or llm-adapter')
+        raise ValueError('Select jev, modernbert, gliclass and/or llm-adapter')
     if len(set(models)) != len(models):
         raise ValueError('Do not repeat a model')
     return {'inputs': [validate_task(task) for task in inputs], 'models': list(models)}

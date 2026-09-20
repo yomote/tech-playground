@@ -1,8 +1,8 @@
 id: decision-workbench
 title: Decision Workbench
 status: exploring
-summary: 日本語・英語の同じ問いをローカル分類モデル、既存Codex、任意のLLM APIへ渡し、分類・基準判定・情報の十分性を比較する実験。
-goal: ModernBERT、GLiClass、公式System One Adapter経由のLLMを同じ課題で比較し、明示情報・一般知識・情報不足とscoreの意味を観察する。
+summary: 日本語・英語の同じ問いをローカル分類モデル、既存Codex、任意のLLM API、Jevへ渡し、分類・基準判定・情報の十分性を比較する実験。
+goal: ModernBERT、GLiClass、公式System One Adapter経由のLLM、直接接続するJevを同じ課題で比較し、明示情報・一般知識・情報不足とscoreの意味を観察する。
 questions:
   - 鶏がらスープがヴィーガン基準に違反するという一般知識を使えるか
   - だしの由来が不明な場合に情報不足を選べるか
@@ -11,8 +11,9 @@ questions:
   - 同じ意味の日本語と英語で判定や候補順位がどう変わるか
   - モデル固有のscoreと実際の正しさを混同せず比較できるか
   - 同じChoice APIで一般LLMへ判定を依頼すると、選択結果・遅延・scoreがどう異なるか
-tags: [zero-shot, text-classification, decision, masked-language-model, multilingual, local-inference, system-one-adapter]
-stack: [python, pytorch, transformers, modernbert, gliclass, system-one-adapter, react, material-ui, vite]
+  - Jevへの直接接続と一般LLMのadapter経由で、同じ基準への判定がどう変わるか
+tags: [zero-shot, text-classification, decision, masked-language-model, multilingual, local-inference, system-one-adapter, jev]
+stack: [python, pytorch, transformers, modernbert, gliclass, system-one-adapter, typesafe-sdk, react, material-ui, vite]
 findings:
   - 2026-09-21のCPU動作確認では、日本語の鶏がらスープを両モデルが誤判定し、GLiClassは候補score 0.941だった。高いscoreは正解確率ではない。
   - 同日のSystem One AdapterとCodex gpt-6-astraによる日本語3例では、鶏がらは違反、由来不明のだしは情報不足、植物由来を明記すると適合になった。少数の動作確認であり一般的な精度の保証ではない。
@@ -29,6 +30,8 @@ references:
     url: https://huggingface.co/knowledgator/gliclass-instruct-base-v1.0
   - title: Official TypeSafe System One Adapter
     url: https://github.com/typesafe-ai/system-one-adapter-python
+  - title: Official TypeSafe documentation
+    url: https://docs.typesafe.ai/
 app:
   url: http://localhost:5177
 createdAt: 2026-09-21
