@@ -16,6 +16,7 @@
 - Consult current official specifications before changing MCP Apps, Microsoft Agent Framework, OpenFGA, or provider APIs. Do not guess SDK names or resource schemas.
 - Keep secrets, Terraform state, downloaded models, and runtime logs out of Git. Azure infrastructure changes require a reviewed plan/what-if; do not treat passing application tests as deployment authorization.
 - Azure Portal access must use the existing Entra tenant, a dedicated single-tenant app with required direct user assignments, and a nonempty Easy Auth user allowlist. Bootstrap with external ingress closed; verify the future public callback and deployed auth before publishing. Keep credentials in Key Vault and never exempt external routes from authentication.
+- Share only the Entra tenant with agent-world. Provision dedicated Tech Playground Container Apps resources in the app resource group and Key Vault / Log Analytics in the management resource group. Keep runtime identities in the app group with vault-scoped read access; do not reuse agent-world runtime resources.
 
 ## Evolving the agent workflow
 

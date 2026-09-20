@@ -4,11 +4,37 @@ PortalをAzure Container Appsへ公開するための準備です。この手順
 
 ## 構成
 
-`infra/azure/main.bicep`はresource group単位でContainer Apps environmentとPortalのContainer Appを作成します。Consumption、0.25 vCPU / 0.5 GiB、min 0 / max 1 replica、8080番を使います。**既存のMicrosoft Entraテナントで認証し、許可したユーザーのobject IDだけを通します。** Entra認証を無効にするparameterはありません。初期の`publishIngress=false`では外部アクセスを閉じ、認証設定の確認後にHTTPS ingressを公開します。
+`infra/azure/main.bicep`はsubscription scopeで、Tech Playground専用のアプリ層と管理・監視層を作成します。**共有するのは既存Microsoft Entraテナントだけ**です。agent-worldのContainer Apps environment、Container App、Key Vault、Managed Identity、Log Analyticsは流用しません。
+
+| 層 / Resource group | 専用resourceの既定名 |
+| --- | --- |
+| アプリ / `rg-tech-playground-app-jpe` | Container Apps environment `cae-tech-playground-jpe`、Portal `ca-tech-playground-portal-jpe`、Identity `id-tech-playground-portal-jpe` |
+| 管理・監視 / `rg-tech-playground-mgmt-jpe` | Log Analytics `law-tech-playground-jpe`、Key Vault `kv-tp-jpe-<unique suffix>` |
+
+`namePrefix=tech-playground`、`regionCode=jpe`、`location=japaneast`を既定値とし、bootstrapと本配備で同じ値を使用します。Key Vaultにはグローバル一意性のためresource group ID由来のsuffixを付けます。各resource groupとresourceにはproject/layerタグを設定します。
+
+Container AppsはConsumption、0.25 vCPU / 0.5 GiB、min 0 / max 1 replica、8080番を使います。**Entraで認証し、許可したユーザーのobject IDだけを通します。** Entra認証を無効にするparameterはありません。初期の`publishIngress=false`では外部アクセスを閉じ、認証設定の確認後にHTTPS ingressを公開します。
 
 認証はContainer Appsの組み込み認証（Easy Auth）がnginxの前で処理します。専用Entra applicationはsingle tenant、Enterprise applicationは割り当て必須にします。テナントに所属するだけでは利用できません。`allowedUserObjectIds`は空を許容せず、アプリ割り当てと許可リストの両方で管理します。`/healthz`、静的assets、詳細ページも外部リクエストの認証対象です。Container Appsのprobeはcontainerの8080番へ直接接続します。
 
-client secretはKey Vaultに保存し、専用User Assigned Managed Identityで参照します。Bicepにはsecret値を渡しません。Log Analytics workspaceは作成せず、ログの永続的な収集も設定しません。scale to zeroにはcold startがあり、利用量等に応じたAzure料金は発生し得ます。
+client secretは管理層のKey Vaultに保存し、アプリ層の専用User Assigned Managed Identityで参照します。そのidentityには対象vaultだけのKey Vault Secrets Userを付与し、管理resource group全体への権限は与えません。Bicepにはsecret値を渡しません。Container Apps environmentは管理層のLog Analyticsへログを送信します。workspaceはPerGB2018、保持期間30日です。接続キーは配備時に参照し、outputやGitには出力しません。ログ取り込み等のAzure料金やscale to zeroのcold startがあります。
+
+```mermaid
+flowchart LR
+  User[許可ユーザー] --> Entra[既存Entraテナント / 専用App登録]
+  Entra --> Portal
+  subgraph AppRG[rg-tech-playground-app-jpe]
+    Portal[専用Container Apps環境 / Portal + Easy Auth]
+    Identity[専用Managed Identity]
+    Portal --> Identity
+  end
+  subgraph ManagementRG[rg-tech-playground-mgmt-jpe]
+    Vault[Key Vault]
+    Logs[Log Analytics]
+  end
+  Identity -->|Secret読み取り| Vault
+  Portal -->|Console / System logs| Logs
+```
 
 Portal imageはReact/Viteの静的buildをnon-root nginxで配信します。`/demos/:id`への直接アクセスはSPAへfallbackし、`/healthz`でhealth checkできます。DemoのPython/Node server、DB、OpenFGA、共通backendは含みません。
 
@@ -56,11 +82,11 @@ GHCR packageのvisibilityをPublicに設定し、Azureから匿名pullできる�
 
 ## Entraと秘密情報の準備
 
-必要: Azure CLI、PowerShell 7、Bicep CLI、既存テナント内でのapplication管理権限と、対象resource groupへのdeployment・role assignment権限。Entra側の権限とAzure subscriptionの権限は別です。以下の手順は準備例であり、このrepositoryへの変更では実行しません。
+必要: Azure CLI、PowerShell 7、Bicep CLI、既存テナント内でのapplication管理権限、subscription配備で2つのresource groupを作成する権限、対象groupへのdeployment・role assignment権限。アプリ配備には管理層のworkspace設定・接続キーの読み取り権限も必要です。Entra側の権限とAzure subscriptionの権限は別です。以下の手順は準備例であり、このrepositoryへの変更では実行しません。
 
 1. 既存Entraテナント内にTech Playground専用applicationを登録し、サポートするaccountを**この組織ディレクトリのみ**にします。agent-worldのclient IDやclient secretは流用しません。
 2. Enterprise applicationの「割り当てが必要ですか？」を「はい」にし、利用させるユーザーを直接割り当てます。初期版はgroupやservice principalの割り当てを扱わず、割り当てたユーザー集合と許可リストの完全一致を確認します。ユーザーobject IDを`allowedUserObjectIds`へ指定します。application/client IDやメールアドレスとは別のIDです。
-3. `infra/azure/auth-foundation.bicep`をwhat-ifしてから適用し、専用Managed IdentityとRBAC有効のKey Vaultを作成します。identityの権限はそのvaultのKey Vault Secrets Userに限定します。
+3. subscription用`infra/azure/auth-foundation.bicep`をwhat-ifしてから適用し、2つのresource group、アプリ層のIdentity、管理層のKey VaultとLog Analyticsを作成します。identityの権限はそのvaultのKey Vault Secrets Userに限定します。
 4. Entra applicationのclient secretを作成し、Key Vaultへ保存します。secretの値はGit、parameter JSON、ログへ書きません。登録作業者には別途vaultへのsecret書き込み権限が必要です。foundationは作業者への権限を自動付与しません。
 5. `infra/azure/portal.local.parameters.json`を作り、下記の値を実環境の値へ置換します。このファイルはGit管理外です。
 
@@ -70,12 +96,13 @@ GHCR packageのvisibilityをPublicに設定し、Azureから匿名pullできる�
   "contentVersion": "1.0.0.0",
   "parameters": {
     "namePrefix": { "value": "tech-playground" },
+    "regionCode": { "value": "jpe" },
+    "location": { "value": "japaneast" },
     "containerImage": { "value": "ghcr.io/your-account/tech-playground-portal:COMMIT" },
     "tenantId": { "value": "YOUR-TENANT-GUID" },
     "clientId": { "value": "DEDICATED-APPLICATION-CLIENT-GUID" },
     "allowedUserObjectIds": { "value": ["ALLOWED-USER-OBJECT-GUID"] },
-    "authManagedIdentityResourceId": { "value": "/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/IDENTITY" },
-    "authClientSecretKeyVaultUri": { "value": "https://VAULT.vault.azure.net/secrets/SECRET-NAME" },
+    "authClientSecretName": { "value": "portal-entra-client-secret" },
     "publishIngress": { "value": false }
   }
 }
@@ -83,18 +110,17 @@ GHCR packageのvisibilityをPublicに設定し、Azureから匿名pullできる�
 
 ## 段階的な配備
 
-既存のsubscriptionとtenantを指定してloginします。以下は実リソースを作成する手順です。各what-ifの差分確認後にcreateを実行してください。`namePrefix`は2〜20文字、小文字英数字とhyphen、先頭は英字、末尾は英数字です。
+既存のsubscriptionとtenantを指定してloginします。以下は実リソースを作成する手順です。各what-ifの差分確認後にcreateを実行してください。`namePrefix`は2〜18文字、小文字英数字とhyphen、先頭は英字、末尾は英数字です。`regionCode`は2〜3文字の小文字英数字です。
 
 ```powershell
 az login --tenant '<existing-tenant-id>'
 az account set --subscription '<subscription-id>'
-$portalGroup = 'rg-tech-playground'
-az group create --name $portalGroup --location japaneast
-az deployment group what-if --resource-group $portalGroup --template-file infra/azure/auth-foundation.bicep
-az deployment group create --name portal-auth-foundation --resource-group $portalGroup --template-file infra/azure/auth-foundation.bicep
+$portalLocation = 'japaneast'
+az deployment sub what-if --location $portalLocation --template-file infra/azure/auth-foundation.bicep
+az deployment sub create --name tech-playground-auth-foundation --location $portalLocation --template-file infra/azure/auth-foundation.bicep
 ```
 
-foundationのoutputからidentityとvaultを確認し、前節のEntra設定・secret保存・parameterファイルを完成させます。必要に応じてsubscriptionのresource providerを登録してください。
+foundationのoutputから管理層のvaultを確認し、前節のEntra設定・secret保存・parameterファイルを完成させます。secret名は`authClientSecretName`と一致させます。Identity、vault URI、workspaceの参照はmainからfoundationのoutputへ自動接続し、外部の既存resourceを入力しません。必要に応じてsubscriptionのresource providerを登録してください。既定以外の名前・地域を使う場合は、foundationにもmainと同じ`namePrefix`、`regionCode`、`location`を渡します。
 
 ```powershell
 $portalParameters = Get-Content infra/azure/portal.local.parameters.json -Raw | ConvertFrom-Json
@@ -105,19 +131,20 @@ $portalAccess = @{
 }
 ./scripts/azure/Test-EntraAccess.ps1 @portalAccess
 if (-not $?) { throw 'Entra preflight failed' }
-az deployment group validate --resource-group $portalGroup --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json'
-az deployment group what-if --resource-group $portalGroup --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json' publishIngress=false
-az deployment group create --name portal --resource-group $portalGroup --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json' publishIngress=false
+az deployment sub validate --location $portalLocation --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json'
+az deployment sub what-if --location $portalLocation --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json' publishIngress=false
+az deployment sub create --name tech-playground-portal --location $portalLocation --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json' publishIngress=false
 ```
 
 初回createは必ず`publishIngress=false`とします。出力`portalUrl`は**公開後の予定URL**です。このURLの`/.auth/login/aad/callback`をEntra applicationの**Web redirect URI**へ登録します。現在の内部URLは別出力`currentIngressUrl`で、hostnameに`.internal.`を含むためcallbackに流用しません。公開する前に、Entraのユーザー割り当て、single tenant設定、配備済みEasy Authの許可リスト・issuer・HTTPS・公開予定callbackを読み取り検証します。
 
 ```powershell
-$portalAppName = az deployment group show --name portal --resource-group $portalGroup --query properties.outputs.containerAppName.value -o tsv
+$portalGroup = az deployment sub show --name tech-playground-portal --query properties.outputs.appResourceGroupName.value -o tsv
+$portalAppName = az deployment sub show --name tech-playground-portal --query properties.outputs.containerAppName.value -o tsv
 ./scripts/azure/Test-EntraAccess.ps1 @portalAccess -ContainerAppName $portalAppName -ResourceGroup $portalGroup
 if (-not $?) { throw 'Deployed authentication does not match the intended access policy' }
-az deployment group what-if --resource-group $portalGroup --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json' publishIngress=true
-az deployment group create --name portal --resource-group $portalGroup --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json' publishIngress=true
+az deployment sub what-if --location $portalLocation --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json' publishIngress=true
+az deployment sub create --name tech-playground-portal --location $portalLocation --template-file infra/azure/main.bicep --parameters '@infra/azure/portal.local.parameters.json' publishIngress=true
 ```
 
 公開後にguardを再実行し、匿名アクセスがログイン誘導または401になること、許可ユーザーで表示できること、未許可ユーザーが拒否されることを実browserで確認します。匿名で`/healthz`が200になる確認は行いません。guard失敗時には外部ingressを閉じ、原因を修正してから再公開します。Bicepのcompileや設定値の照合だけでは、実際のログイン・拒否動作まで検証したことにはなりません。
@@ -139,3 +166,5 @@ GitHub Actionsのimage build/pushとAzure deploymentは次の段階です。Azur
 - [NGINX Unprivileged image](https://github.com/nginx/docker-nginx-unprivileged)
 - [Container Apps Entra authentication](https://learn.microsoft.com/en-us/azure/container-apps/authentication-entra)
 - [Container Apps authConfigs schema](https://learn.microsoft.com/en-us/azure/templates/microsoft.app/containerapps/authconfigs)
+- [Subscription scope Bicep deployments](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-to-subscription)
+- [Log Analytics workspace schema](https://learn.microsoft.com/en-us/azure/templates/microsoft.operationalinsights/workspaces)

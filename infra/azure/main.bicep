@@ -1,195 +1,77 @@
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
 
-@description('Lowercase letters, digits, and hyphens; start with a letter and end with a letter or digit.')
 @minLength(2)
-@maxLength(20)
+@maxLength(18)
 param namePrefix string = 'tech-playground'
 
-@description('Azure region for the Container Apps environment and Portal.')
-param location string = resourceGroup().location
+@minLength(2)
+@maxLength(3)
+param regionCode string = 'jpe'
 
-@description('Prebuilt, anonymously pullable Portal image. Prefer an immutable tag or sha256 digest.')
+param location string = 'japaneast'
+
+@description('Prebuilt Portal image; use a digest or immutable tag.')
 @minLength(1)
 param containerImage string
 
-@description('Single-tenant Entra tenant ID. Anonymous access is never enabled by this template.')
+@description('Existing Entra tenant; Azure runtime resources are dedicated to Tech Playground.')
 @minLength(36)
 @maxLength(36)
 param tenantId string
 
-@description('Existing single-tenant Entra application client ID used for Portal sign-in.')
+@description('Dedicated Tech Playground single-tenant Entra application client ID.')
 @minLength(36)
 @maxLength(36)
 param clientId string
 
-@description('Explicit Entra user object IDs allowed to access the Portal; tenant membership alone does not grant access.')
 @minLength(1)
 param allowedUserObjectIds string[]
 
-@description('Existing user-assigned managed identity resource ID. It must already have Key Vault Secrets User access to the referenced secret.')
+@description('Name of the already populated client-secret entry in the dedicated management Key Vault; never a secret value.')
 @minLength(1)
-param authManagedIdentityResourceId string
+@maxLength(127)
+param authClientSecretName string = 'portal-entra-client-secret'
 
-@description('Existing Key Vault secret HTTPS URI containing the Entra application client secret. Never pass a plaintext client secret.')
-@minLength(1)
-@secure()
-param authClientSecretKeyVaultUri string
-
-@description('Keep false for initial deployment. Publish only after the enabled auth configuration and explicit user allowlist have been verified on the existing app.')
+@description('Initial deployment must remain internal; verify Entra and future public callback before enabling ingress.')
 param publishIngress bool = false
 
-param tags object = {
-  project: 'tech-playground'
-  component: 'portal'
-}
-
-var authSecretName = 'microsoft-provider-authentication-secret'
-
-resource environment 'Microsoft.App/managedEnvironments@2026-01-01' = {
-  name: '${namePrefix}-env'
-  location: location
-  tags: tags
-  properties: {
-    publicNetworkAccess: 'Enabled'
-    appLogsConfiguration: {
-      destination: 'none'
-    }
-    workloadProfiles: [
-      {
-        name: 'Consumption'
-        workloadProfileType: 'Consumption'
-      }
-    ]
+// Run auth-foundation.bicep first to create the two groups and populate Key Vault.
+// Reapplying the same foundation here keeps names, scope, identity and logging consistent.
+module foundation './auth-foundation.bicep' = {
+  name: '${namePrefix}-foundation'
+  params: {
+    namePrefix: namePrefix
+    regionCode: regionCode
+    location: location
   }
 }
 
-resource portal 'Microsoft.App/containerApps@2026-01-01' = {
+module portal './modules/portal.bicep' = {
   name: '${namePrefix}-portal'
-  location: location
-  tags: tags
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${authManagedIdentityResourceId}': {}
-    }
-  }
-  properties: {
-    environmentId: environment.id
-    workloadProfileName: 'Consumption'
-    configuration: {
-      activeRevisionsMode: 'Single'
-      ingress: {
-        external: publishIngress
-        targetPort: 8080
-        transport: 'http'
-        allowInsecure: false
-      }
-      secrets: [
-        {
-          name: authSecretName
-          keyVaultUrl: authClientSecretKeyVaultUri
-          identity: authManagedIdentityResourceId
-        }
-      ]
-    }
-    template: {
-      containers: [
-        {
-          name: 'portal'
-          image: containerImage
-          resources: {
-            cpu: json('0.25')
-            memory: '0.5Gi'
-          }
-          probes: [
-            {
-              type: 'Readiness'
-              httpGet: {
-                path: '/healthz'
-                port: 8080
-              }
-              initialDelaySeconds: 2
-              periodSeconds: 10
-            }
-            {
-              type: 'Liveness'
-              httpGet: {
-                path: '/healthz'
-                port: 8080
-              }
-              initialDelaySeconds: 10
-              periodSeconds: 30
-            }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: 0
-        maxReplicas: 1
-        rules: [
-          {
-            name: 'http'
-            http: {
-              metadata: {
-                concurrentRequests: '20'
-              }
-            }
-          }
-        ]
-      }
-    }
+  // Module scope must be known before deployment; output references below
+  // still ensure the foundation finishes before the Portal starts.
+  scope: resourceGroup('rg-${namePrefix}-app-${regionCode}')
+  params: {
+    namePrefix: namePrefix
+    regionCode: regionCode
+    location: location
+    containerImage: containerImage
+    tenantId: tenantId
+    clientId: clientId
+    allowedUserObjectIds: allowedUserObjectIds
+    authManagedIdentityResourceId: foundation.outputs.identityResourceId
+    authClientSecretKeyVaultUri: '${foundation.outputs.vaultURI}secrets/${authClientSecretName}'
+    managementResourceGroupName: foundation.outputs.managementResourceGroupName
+    logAnalyticsWorkspaceName: foundation.outputs.logAnalyticsWorkspaceName
+    publishIngress: publishIngress
   }
 }
 
-resource portalAuth 'Microsoft.App/containerApps/authConfigs@2026-01-01' = {
-  parent: portal
-  name: 'current'
-  properties: {
-    platform: {
-      enabled: true
-    }
-    globalValidation: {
-      unauthenticatedClientAction: 'RedirectToLoginPage'
-      redirectToProvider: 'azureactivedirectory'
-      // Probes connect directly to the container; all external routes require sign-in.
-      excludedPaths: []
-    }
-    httpSettings: {
-      requireHttps: true
-      routes: {
-        apiPrefix: '/.auth'
-      }
-    }
-    identityProviders: {
-      azureActiveDirectory: {
-        enabled: true
-        registration: {
-          clientId: clientId
-          clientSecretSettingName: authSecretName
-          openIdIssuer: '${az.environment().authentication.loginEndpoint}${tenantId}/v2.0'
-        }
-        validation: {
-          defaultAuthorizationPolicy: {
-            allowedPrincipals: {
-              identities: allowedUserObjectIds
-            }
-          }
-        }
-      }
-    }
-    login: {
-      tokenStore: {
-        enabled: false
-      }
-    }
-  }
-}
-
-// Internal ingress adds `.internal.` to the current FQDN. Register the future
-// public callback before publishing, so the redirect URI does not change at launch.
-output portalUrl string = 'https://${portal.name}.${environment.properties.defaultDomain}'
-output currentIngressUrl string = 'https://${portal.properties.configuration.ingress.fqdn}'
-output containerAppName string = portal.name
-output environmentName string = environment.name
-output authConfigId string = portalAuth.id
-output externalIngressPublished bool = publishIngress
+output appResourceGroupName string = foundation.outputs.appResourceGroupName
+output managementResourceGroupName string = foundation.outputs.managementResourceGroupName
+output portalUrl string = portal.outputs.portalUrl
+output currentIngressUrl string = portal.outputs.currentIngressUrl
+output containerAppName string = portal.outputs.containerAppName
+output environmentName string = portal.outputs.environmentName
+output authConfigId string = portal.outputs.authConfigId
+output externalIngressPublished bool = portal.outputs.externalIngressPublished

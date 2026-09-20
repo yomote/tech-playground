@@ -50,7 +50,7 @@ jobs:
         run: |
           az bicep install --version v0.46.1
           echo "$HOME/.azure/bin" >> "$GITHUB_PATH"
-      - name: Compile authentication foundation
+      - name: Compile application and management foundation
         run: bicep build infra/azure/auth-foundation.bicep --stdout > /dev/null
       - name: Verify Portal authentication boundary
         run: python3 infra/azure/test_auth_template.py

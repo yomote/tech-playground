@@ -1,54 +1,61 @@
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
 
-@description('Lowercase letters, digits, and hyphens; start with a letter and end with a letter or digit.')
+@description('Tech Playground resource prefix; use lowercase letters, digits, and hyphens.')
 @minLength(2)
-@maxLength(20)
+@maxLength(18)
 param namePrefix string = 'tech-playground'
 
-@description('Azure region for the dedicated Portal authentication identity and Key Vault.')
-param location string = resourceGroup().location
+@description('Short region suffix used in names; jpe denotes Japan East.')
+@minLength(2)
+@maxLength(3)
+param regionCode string = 'jpe'
 
-var tags = {
-  project: 'tech-playground'
-  component: 'portal-auth'
-}
+param location string = 'japaneast'
 
-resource authIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30' = {
-  name: '${namePrefix}-auth-identity'
+resource appGroup 'Microsoft.Resources/resourceGroups@2025-04-01' = {
+  name: 'rg-${namePrefix}-app-${regionCode}'
   location: location
-  tags: tags
-}
-
-resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' = {
-  // Seven prefix characters + four separators/suffix characters + 13-character hash = 24.
-  name: '${take(replace(namePrefix, '-', ''), 7)}-kv-${uniqueString(resourceGroup().id, namePrefix)}'
-  location: location
-  tags: tags
-  properties: {
-    tenantId: tenant().tenantId
-    sku: {
-      family: 'A'
-      name: 'standard'
-    }
-    enableRbacAuthorization: true
-    enableSoftDelete: true
-    enablePurgeProtection: true
-    softDeleteRetentionInDays: 7
-    // Access to secret contents still requires an explicit data-plane RBAC grant.
-    publicNetworkAccess: 'Enabled'
+  tags: {
+    project: namePrefix
+    layer: 'app'
   }
 }
 
-resource secretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, authIdentity.id, 'Key Vault Secrets User')
-  scope: keyVault
-  properties: {
-    principalId: authIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+resource managementGroup 'Microsoft.Resources/resourceGroups@2025-04-01' = {
+  name: 'rg-${namePrefix}-mgmt-${regionCode}'
+  location: location
+  tags: {
+    project: namePrefix
+    layer: 'management'
   }
 }
 
-output identityResourceId string = authIdentity.id
-output vaultName string = keyVault.name
-output vaultURI string = keyVault.properties.vaultUri
+module appIdentity './modules/app-identity.bicep' = {
+  name: '${namePrefix}-app-identity'
+  scope: appGroup
+  params: {
+    namePrefix: namePrefix
+    regionCode: regionCode
+    location: location
+  }
+}
+
+module management './modules/management.bicep' = {
+  name: '${namePrefix}-management'
+  scope: managementGroup
+  params: {
+    namePrefix: namePrefix
+    regionCode: regionCode
+    location: location
+    authIdentityPrincipalId: appIdentity.outputs.principalId
+    authIdentityResourceId: appIdentity.outputs.identityResourceId
+  }
+}
+
+output appResourceGroupName string = appGroup.name
+output managementResourceGroupName string = managementGroup.name
+output identityResourceId string = appIdentity.outputs.identityResourceId
+output vaultName string = management.outputs.vaultName
+output vaultURI string = management.outputs.vaultURI
+output logAnalyticsWorkspaceName string = management.outputs.logAnalyticsWorkspaceName
+output logAnalyticsWorkspaceResourceId string = management.outputs.logAnalyticsWorkspaceResourceId

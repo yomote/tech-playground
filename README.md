@@ -158,5 +158,5 @@ credentialやDockerがなくてもroot install/build/typecheck/lintとPortalは�
 
 - [DevOps AgentとCI](docs/devops.md): 実チェックの実行、証跡保存、reviewの扱い。
 - [GitHub設定IaC](infra/github/README.md): agent-worldと同じTerraform方式。既存repositoryをimportして管理。
-- [Azure配備準備](docs/azure-deployment.md): 既存Entraテナントの許可ユーザーだけが使えるPortalをContainer Appsへ配備するBicepとcontainer。初期は外部ingressを閉じ、認証確認後に公開。クラウドリソースは未作成。
+- [Azure配備準備](docs/azure-deployment.md): Entraテナントだけを共有し、Tech Playground専用のアプリRG（Container Apps・Identity）と管理RG（Key Vault・Log Analytics）をBicepで定義。許可ユーザーのみ利用でき、初期は外部ingressを閉じます。クラウドリソースは未作成。
 - [Agent作業指針](AGENTS.md): 実験の独立性を保ち、実際の課題からハーネス・スキル・MCPを育てる。
