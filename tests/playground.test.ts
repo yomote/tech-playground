@@ -11,8 +11,8 @@ import { explain, seed, Tuple } from '../demos/openfga-sharing-playground/domain
 
 test('metadata is valid, flat, and searchable across questions/findings', async () => {
   const entries = await loadDemos();
-  const demos = entries.filter(demo => ['mcp-apps-playground', 'maf-magentic-scrum', 'openfga-sharing-playground'].includes(demo.id));
-  assert.equal(demos.length, 3); assert.equal(DemoStatus.options.length, 6);
+  const demos = entries.filter(demo => ['mcp-apps-playground', 'maf-magentic-scrum', 'openfga-sharing-playground', 'decision-workbench'].includes(demo.id));
+  assert.equal(demos.length, 4); assert.equal(DemoStatus.options.length, 6);
   assert.equal(searchDemos(demos, 'human approval')[0].id, 'maf-magentic-scrum');
   assert.equal(searchDemos(demos, 'experimentId', { stack: 'typescript' }).length, 1);
   assert.equal(searchDemos(demos, '', { status: 'exploring', tag: 'openfga' }).length, 1);

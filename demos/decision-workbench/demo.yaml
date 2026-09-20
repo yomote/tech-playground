@@ -1,0 +1,30 @@
+id: decision-workbench
+title: Decision Workbench
+status: exploring
+summary: 日本語・英語の同じ問いをModernBERTとGLiClassへ渡し、分類・基準判定・情報の十分性を比較するローカル実験。
+goal: 質問、判断基準、選択肢の書き方を変え、軽量な分類モデルが明示情報・一般知識・情報不足をどこまで区別できるか観察する。
+questions:
+  - 鶏がらスープがヴィーガン基準に違反するという一般知識を使えるか
+  - だしの由来が不明な場合に情報不足を選べるか
+  - 同じ開発依頼の分類と実装着手条件の十分性を区別できるか
+  - 受け入れ基準を明記すると判定がどう変わるか
+  - 同じ意味の日本語と英語で判定や候補順位がどう変わるか
+  - モデル固有のscoreと実際の正しさを混同せず比較できるか
+tags: [zero-shot, text-classification, decision, masked-language-model, multilingual, local-inference]
+stack: [python, pytorch, transformers, modernbert, gliclass, react, material-ui, vite]
+findings: []
+references:
+  - title: ModernBERT official repository
+    url: https://github.com/AnswerDotAI/ModernBERT
+  - title: ModernBERT-Large-Instruct official model card
+    url: https://huggingface.co/answerdotai/ModernBERT-Large-Instruct
+  - title: GLiClass official repository
+    url: https://github.com/Knowledgator/GLiClass
+  - title: GLiClass official usage documentation
+    url: https://docs.knowledgator.com/docs/frameworks/gliclass/usage/
+  - title: GLiClass-Instruct Base official model card
+    url: https://huggingface.co/knowledgator/gliclass-instruct-base-v1.0
+app:
+  url: http://localhost:5177
+createdAt: 2026-09-21
+updatedAt: 2026-09-21

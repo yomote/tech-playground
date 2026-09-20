@@ -1,0 +1,23 @@
+.workbench-toolbar { display:flex; align-items:center; justify-content:space-between; gap:20px; margin:0 0 24px; padding:16px 20px; background:#eef0f7; border:1px solid #e1e5f0; border-radius:10px; }
+.workbench-layout { display:grid; grid-template-columns:minmax(310px,1.05fr) minmax(310px,1.1fr) minmax(240px,.8fr); gap:20px; align-items:start; }
+.workbench-layout > * { min-width:0; }
+.workbench-input .lab-panel,.workbench-results .lab-panel,.workbench-history .lab-panel { padding:22px; }
+.option-editor { background:#f7f8fb; border:1px solid #e4e8f0; padding:12px; border-radius:8px; }
+.model-setup { margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid #e6e9f1; }
+.model-setup:last-child { margin-bottom:0; border:0; padding-bottom:0; }
+.model-setup .MuiFormControlLabel-root { margin-right:4px; }
+.result-empty { min-height:115px; display:flex; align-items:center; justify-content:center; gap:14px; }
+.result-timing { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:24px; padding-top:16px; border-top:1px solid #e5e8f0; }
+.result-timing strong { display:block; font-size:16px; font-weight:600; color:#343d68; }
+.result-change { display:flex; flex-direction:column; align-items:flex-start; gap:3px; border-bottom:1px solid #e7eaf2; padding:10px 0; }
+.diff-text { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; line-height:1.7; border-radius:5px; padding:8px; max-height:170px; overflow:auto; margin-bottom:8px; }
+.diff-before { background:#f7f0f2; color:#704350; }
+.diff-after { background:#eef5f3; color:#365b52; }
+.history-button.MuiButton-root { display:flex; justify-content:space-between; text-align:left; white-space:normal; padding:9px 11px; line-height:1.6; }
+.history-button.MuiButton-root.selected { background:#edf0fa; border-color:#6f7aab; }
+.history-button strong,.history-button small { display:block; }
+.history-button small { color:#626d82; font-size:10px; font-weight:400; }
+.workbench-results .code-block { max-height:270px; font-size:11px; }
+@media(min-width:1600px) { .workbench-layout { grid-template-columns:minmax(355px,1.05fr) minmax(390px,1.15fr) minmax(270px,.8fr); } }
+@media(max-width:1150px) { .workbench-layout { grid-template-columns:minmax(300px,1fr) minmax(320px,1.2fr); } .workbench-history { grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:20px; } }
+@media(max-width:740px) { .workbench-toolbar { align-items:flex-start; flex-direction:column; gap:12px; padding:14px; } .workbench-layout { grid-template-columns:1fr; } .workbench-history { display:block; } .workbench-input .lab-panel,.workbench-results .lab-panel,.workbench-history .lab-panel { padding:18px; } }

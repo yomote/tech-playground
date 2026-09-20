@@ -1,0 +1,330 @@
+[
+  {
+    "id": "chicken-vegan-ja",
+    "title": "鶏がらスープはヴィーガン？",
+    "basis": "knowledge",
+    "rationale": "鶏がらスープは鶏に由来するという一般知識を使うと、動物由来原材料を含むため基準に違反する。材料名にヴィーガンという単語がないことだけで判定しない。",
+    "expectedOptionId": "violates",
+    "mode": "criteria",
+    "language": "ja",
+    "text": "材料は鶏がらスープ、にんじん、塩です。これ以外の材料は使っていません。",
+    "question": "このスープは指定のヴィーガン基準を満たしますか？",
+    "criteria": "動物由来の原材料を一切使わない料理であること。",
+    "options": [
+      {
+        "id": "meets",
+        "label": "基準を満たす",
+        "description": "記載された条件がすべて基準を満たす。"
+      },
+      {
+        "id": "violates",
+        "label": "基準に違反する",
+        "description": "少なくとも一つの記載内容が基準と矛盾する。"
+      },
+      {
+        "id": "insufficient",
+        "label": "情報不足",
+        "description": "基準を判定するために必要な情報が記載されていない。"
+      }
+    ]
+  },
+  {
+    "id": "chicken-vegan-en",
+    "title": "Is chicken stock vegan?",
+    "basis": "knowledge",
+    "rationale": "General food knowledge identifies chicken stock as animal-derived, so it violates the criterion. The decision is not merely whether the word vegan occurs in the text.",
+    "expectedOptionId": "violates",
+    "mode": "criteria",
+    "language": "en",
+    "text": "The ingredients are chicken stock, carrots, and salt. No other ingredients are used.",
+    "question": "Does this soup meet the specified vegan criterion?",
+    "criteria": "The dish must contain no animal-derived ingredients.",
+    "options": [
+      {
+        "id": "meets",
+        "label": "Meets the criterion",
+        "description": "The stated conditions satisfy all parts of the criterion."
+      },
+      {
+        "id": "violates",
+        "label": "Violates the criterion",
+        "description": "At least one stated fact conflicts with the criterion."
+      },
+      {
+        "id": "insufficient",
+        "label": "Insufficient information",
+        "description": "Information needed to decide is not stated."
+      }
+    ]
+  },
+  {
+    "id": "unknown-stock-vegan-ja",
+    "title": "だしの由来が書かれていない",
+    "basis": "text",
+    "rationale": "だしの原材料が不明なため、動物由来成分の有無を確定できない。野菜が入っていることは、だしまで植物由来である証拠にはならない。",
+    "expectedOptionId": "insufficient",
+    "mode": "criteria",
+    "language": "ja",
+    "text": "材料はだし、にんじん、塩です。これ以外の材料は使っていません。だしの原材料は記載されていません。",
+    "question": "このスープは指定のヴィーガン基準を満たしますか？",
+    "criteria": "動物由来の原材料を一切使わない料理であること。 だしの由来については本文の記載だけを使い、野菜だしか肉だしかを推測しない。",
+    "options": [
+      {
+        "id": "meets",
+        "label": "基準を満たす",
+        "description": "記載された条件がすべて基準を満たす。"
+      },
+      {
+        "id": "violates",
+        "label": "基準に違反する",
+        "description": "少なくとも一つの記載内容が基準と矛盾する。"
+      },
+      {
+        "id": "insufficient",
+        "label": "情報不足",
+        "description": "基準を判定するために必要な情報が記載されていない。"
+      }
+    ]
+  },
+  {
+    "id": "unknown-stock-vegan-en",
+    "title": "The source of the stock is unstated",
+    "basis": "text",
+    "rationale": "The stock ingredients are unknown, so animal-derived content cannot be determined. The presence of vegetables does not establish the source of the stock.",
+    "expectedOptionId": "insufficient",
+    "mode": "criteria",
+    "language": "en",
+    "text": "The ingredients are stock, carrots, and salt. No other ingredients are used. The ingredients of the stock are not stated.",
+    "question": "Does this soup meet the specified vegan criterion?",
+    "criteria": "The dish must contain no animal-derived ingredients. Use only the stated information about the stock; do not assume vegetable or meat stock.",
+    "options": [
+      {
+        "id": "meets",
+        "label": "Meets the criterion",
+        "description": "The stated conditions satisfy all parts of the criterion."
+      },
+      {
+        "id": "violates",
+        "label": "Violates the criterion",
+        "description": "At least one stated fact conflicts with the criterion."
+      },
+      {
+        "id": "insufficient",
+        "label": "Insufficient information",
+        "description": "Information needed to decide is not stated."
+      }
+    ]
+  },
+  {
+    "id": "vegetable-stock-vegan-ja",
+    "title": "だしの原材料を明記する",
+    "basis": "text",
+    "rationale": "全材料が明記され、野菜だしの植物由来性と動物由来原材料を使わないことが明示されている。本文の記載を前提とした基準判定であり、実物の成分検査ではない。",
+    "expectedOptionId": "meets",
+    "mode": "criteria",
+    "language": "ja",
+    "text": "材料は100%植物由来の野菜だし、にんじん、塩だけです。動物由来の原材料は使っていません。",
+    "question": "このスープは指定のヴィーガン基準を満たしますか？",
+    "criteria": "動物由来の原材料を一切使わない料理であること。 だしの由来については本文の記載だけを使い、野菜だしか肉だしかを推測しない。",
+    "options": [
+      {
+        "id": "meets",
+        "label": "基準を満たす",
+        "description": "記載された条件がすべて基準を満たす。"
+      },
+      {
+        "id": "violates",
+        "label": "基準に違反する",
+        "description": "少なくとも一つの記載内容が基準と矛盾する。"
+      },
+      {
+        "id": "insufficient",
+        "label": "情報不足",
+        "description": "基準を判定するために必要な情報が記載されていない。"
+      }
+    ]
+  },
+  {
+    "id": "vegetable-stock-vegan-en",
+    "title": "The stock ingredients are explicit",
+    "basis": "text",
+    "rationale": "The complete ingredient list, plant-derived stock, and absence of animal-derived ingredients are explicitly stated. This is a decision based on the text, not a laboratory verification of actual food.",
+    "expectedOptionId": "meets",
+    "mode": "criteria",
+    "language": "en",
+    "text": "The only ingredients are 100% plant-derived vegetable stock, carrots, and salt. No animal-derived ingredients are used.",
+    "question": "Does this soup meet the specified vegan criterion?",
+    "criteria": "The dish must contain no animal-derived ingredients. Use only the stated information about the stock; do not assume vegetable or meat stock.",
+    "options": [
+      {
+        "id": "meets",
+        "label": "Meets the criterion",
+        "description": "The stated conditions satisfy all parts of the criterion."
+      },
+      {
+        "id": "violates",
+        "label": "Violates the criterion",
+        "description": "At least one stated fact conflicts with the criterion."
+      },
+      {
+        "id": "insufficient",
+        "label": "Insufficient information",
+        "description": "Information needed to decide is not stated."
+      }
+    ]
+  },
+  {
+    "id": "csv-request-type-ja",
+    "title": "同じ開発依頼を分類する",
+    "basis": "text",
+    "rationale": "CSVエクスポートボタンの追加を明示しているため機能追加に分類する。具体的な受け入れ条件がないこととは別の問い。",
+    "expectedOptionId": "feature",
+    "mode": "classification",
+    "language": "ja",
+    "text": "タスク一覧にCSVエクスポートボタンを追加してください。",
+    "question": "この依頼の主な種類は何ですか？",
+    "criteria": "本文で依頼されている主な作業を分類する。誤動作や説明不足が書かれていなければ、それらを推測して補わない。",
+    "options": [
+      {
+        "id": "feature",
+        "label": "機能追加",
+        "description": "新しい操作や機能を追加する依頼。"
+      },
+      {
+        "id": "bug",
+        "label": "不具合修正",
+        "description": "現在の誤動作を直す依頼。"
+      },
+      {
+        "id": "documentation",
+        "label": "説明の改善",
+        "description": "利用方法やドキュメントを改善する依頼。"
+      }
+    ]
+  },
+  {
+    "id": "csv-request-type-en",
+    "title": "Classify the development request",
+    "basis": "text",
+    "rationale": "The request explicitly asks for a new CSV export button, so it is a feature request. Whether its acceptance criteria are complete is a separate question.",
+    "expectedOptionId": "feature",
+    "mode": "classification",
+    "language": "en",
+    "text": "Please add a CSV export button to the task list.",
+    "question": "What is the primary type of this request?",
+    "criteria": "Classify the main work requested in the text. Do not invent faulty behavior or missing documentation when neither is stated.",
+    "options": [
+      {
+        "id": "feature",
+        "label": "Feature request",
+        "description": "A request to add a new capability or interaction."
+      },
+      {
+        "id": "bug",
+        "label": "Bug fix",
+        "description": "A request to correct existing faulty behavior."
+      },
+      {
+        "id": "documentation",
+        "label": "Documentation improvement",
+        "description": "A request to improve usage instructions or documentation."
+      }
+    ]
+  },
+  {
+    "id": "csv-request-incomplete-ja",
+    "title": "機能追加でも着手条件は不足する",
+    "basis": "text",
+    "rationale": "ボタン追加という目的は分かるが、対象行、列、文字コード、ヘッダー、空結果、失敗時の仕様がない。機能分類ができることと、指定された着手条件を満たすことを分ける。",
+    "expectedOptionId": "insufficient",
+    "mode": "sufficiency",
+    "language": "ja",
+    "text": "タスク一覧にCSVエクスポートボタンを追加してください。",
+    "question": "この依頼には、指定の受け入れ基準に照らして実装に着手するための情報が揃っていますか？",
+    "criteria": "対象行の範囲、出力列と順序、文字コードとBOMの有無、ヘッダーの有無、対象行が0件の場合、保存失敗時の挙動がすべて本文に明記されていること。未記載の仕様を推測しない。",
+    "options": [
+      {
+        "id": "sufficient",
+        "label": "必要な情報が揃っている",
+        "description": "着手に必要と指定された条件が本文にすべて明記されている。"
+      },
+      {
+        "id": "insufficient",
+        "label": "情報不足",
+        "description": "必要と指定された条件の少なくとも一つが本文にない。"
+      }
+    ]
+  },
+  {
+    "id": "csv-request-incomplete-en",
+    "title": "A feature request can still lack requirements",
+    "basis": "text",
+    "rationale": "The requested feature is clear, but row scope, columns, encoding, header policy, empty results, and failure behavior are missing. Classifying the request does not make its acceptance criteria complete.",
+    "expectedOptionId": "insufficient",
+    "mode": "sufficiency",
+    "language": "en",
+    "text": "Please add a CSV export button to the task list.",
+    "question": "Does this request provide enough information to begin implementation under the specified acceptance criteria?",
+    "criteria": "The text must explicitly specify the row scope, output columns and order, character encoding and BOM policy, whether to include a header, behavior for zero rows, and behavior when saving fails. Do not assume unstated requirements.",
+    "options": [
+      {
+        "id": "sufficient",
+        "label": "Sufficient information",
+        "description": "Every condition explicitly required for starting work is stated."
+      },
+      {
+        "id": "insufficient",
+        "label": "Insufficient information",
+        "description": "At least one required condition is missing from the text."
+      }
+    ]
+  },
+  {
+    "id": "csv-request-complete-ja",
+    "title": "受け入れ基準を追加して再判定",
+    "basis": "text",
+    "rationale": "指定された6項目がすべて本文に明記されているため、このfixtureで定義した着手条件は満たす。実際の製品に必要な全仕様が網羅されたと主張するものではない。",
+    "expectedOptionId": "sufficient",
+    "mode": "sufficiency",
+    "language": "ja",
+    "text": "タスク一覧にCSVエクスポートボタンを追加してください。 対象は現在のフィルターに一致する全行とします。列はid、title、statusの順です。UTF-8でBOMなし、ヘッダーありで保存します。対象行が0件ならヘッダーだけを出力します。保存に失敗したらエラーを表示し、再試行ボタンを出します。",
+    "question": "この依頼には、指定の受け入れ基準に照らして実装に着手するための情報が揃っていますか？",
+    "criteria": "対象行の範囲、出力列と順序、文字コードとBOMの有無、ヘッダーの有無、対象行が0件の場合、保存失敗時の挙動がすべて本文に明記されていること。未記載の仕様を推測しない。",
+    "options": [
+      {
+        "id": "sufficient",
+        "label": "必要な情報が揃っている",
+        "description": "着手に必要と指定された条件が本文にすべて明記されている。"
+      },
+      {
+        "id": "insufficient",
+        "label": "情報不足",
+        "description": "必要と指定された条件の少なくとも一つが本文にない。"
+      }
+    ]
+  },
+  {
+    "id": "csv-request-complete-en",
+    "title": "Add acceptance criteria and decide again",
+    "basis": "text",
+    "rationale": "All six required items are explicitly stated, so the starting conditions defined for this fixture are satisfied. This does not claim to cover every requirement of a real product.",
+    "expectedOptionId": "sufficient",
+    "mode": "sufficiency",
+    "language": "en",
+    "text": "Please add a CSV export button to the task list. Export all rows matching the current filter. Columns must be id, title, and status in that order. Save as UTF-8 without a BOM and with a header. If there are zero matching rows, export only the header. If saving fails, show an error and a retry button.",
+    "question": "Does this request provide enough information to begin implementation under the specified acceptance criteria?",
+    "criteria": "The text must explicitly specify the row scope, output columns and order, character encoding and BOM policy, whether to include a header, behavior for zero rows, and behavior when saving fails. Do not assume unstated requirements.",
+    "options": [
+      {
+        "id": "sufficient",
+        "label": "Sufficient information",
+        "description": "Every condition explicitly required for starting work is stated."
+      },
+      {
+        "id": "insufficient",
+        "label": "Insufficient information",
+        "description": "At least one required condition is missing from the text."
+      }
+    ]
+  }
+]

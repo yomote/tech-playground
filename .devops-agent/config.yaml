@@ -62,3 +62,10 @@ testing:
       description: Reject missing or stale evidence and pending manual validation in CI
       required: true
       always: true
+    - id: decision-workbench-contract
+      type: regression
+      command: python -m unittest -v test_contract
+      cwd: demos/decision-workbench
+      description: Decision input validation, fixture answers, and edited-input expectations without model downloads
+      required: true
+      always: true

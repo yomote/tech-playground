@@ -6,7 +6,7 @@
 
 1. Demoの問いを`demo.yaml`へ書き、独立したvertical sliceとして実装する。
 2. 変更した画面・protocol・実serverを必要な範囲で触り、観察をREADME/findingsへ残す。
-3. commit済みのcleanなfeature branchで`pnpm devops:check`を実行する。build/typecheck/lint/root tests/Python runner/CI gate testsは毎回実行する。
+3. commit済みのcleanなfeature branchで`pnpm devops:check`を実行する。build/typecheck/lint/root tests/Python runner/Decision Workbench contract/CI gate testsは毎回実行する。
 4. `pnpm devops:report`と`.devops-agent/runs/`を確認する。mockの終了code 3は「実reviewが必要」。テスト失敗・未実施を成功に読み替えない。
 5. PRのActionsでrevisionに結び付いたevidenceを確認し、実レビューを行う。CIの緑だけでrelease可能と判断しない。
 
@@ -30,7 +30,7 @@ wrapperはstdinの単一JSON（`protocolVersion: 1`、`task`、`instructions`、
 | 人手でしか見えないprotocolや関係を追う必要がある | structured event/evidenceとMCP toolの契約 |
 | mockでは判断できない挙動がある | 実server/SDK用の独立したintegration check |
 
-改善は実際の失敗・操作の手間から一つずつ行い、変更前の問題と検証結果を残します。新しいskillやMCPを増やすこと自体を目的にせず、不要な権限や共通runtime依存を持ち込まないこと。UI browser検証、実OpenFGA、MCP HTTP smoke、credentialを使うMagentic実行は現在の自動baselineの外です。追加時はserverの起動・終了、port衝突、timeout、credentialなしの扱いまでcommandとして定義してください。
+改善は実際の失敗・操作の手間から一つずつ行い、変更前の問題と検証結果を残します。新しいskillやMCPを増やすこと自体を目的にせず、不要な権限や共通runtime依存を持ち込まないこと。UI browser検証、実OpenFGA、MCP HTTP smoke、credentialを使うMagentic実行、Decision Workbenchの実モデル推論は現在の自動baselineの外です。追加時はserverの起動・終了、port衝突、timeout、credentialなしの扱いまでcommandとして定義してください。
 
 DevOps Agent v0.1.1には手動evidenceのimport機能がありません。実plannerがrequired manual testを追加した場合はblockedになります。結果を偽装せず、実行可能なcheckを登録してreview/plan/verifyをやり直します。`--approve-by`はローカルの人間の申告であり、未実施テストを解除する機能ではありません。
 

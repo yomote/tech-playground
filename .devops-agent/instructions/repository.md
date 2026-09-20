@@ -1,14 +1,14 @@
 # Repository instructions for DevOps Agent
 
 Tech Playground is a flat collection of independent vertical-slice demos. Demo
-runtime/framework choices are free. Existing React Portal and three React demo
+runtime/framework choices are free. Existing React Portal and four React demo
 frontends share optional @playground/ui Material UI components; preserve their
 navy/light-gray design, but do not require this package or React for future demos.
 Keep filesystem loading outside browser code and share metadata through the Zod
 contract in packages/demo-schema.
 
 Run every registered baseline command: root build, typecheck, lint, full root
-tests, Python mock-runner tests and CI evidence-gate tests. The small suite always
+tests, Python mock-runner tests, Decision Workbench contract tests and CI evidence-gate tests. The small suite always
 runs, including initial-commit baselines. Do not replace it with name filters or
 omit tests on configuration-only changes. A real planner may add specific
 validation; required catalog tests cannot be weakened. Preserve failures and

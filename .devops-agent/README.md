@@ -13,7 +13,7 @@ pnpm devops:report
 pnpm exec devops-agent run --base <base-sha> --head HEAD --json
 ```
 
-`config.yaml` registers the exact executable commands. All six baseline checks
+`config.yaml` registers the exact executable commands. All seven baseline checks
 run on every change: root build, typecheck, lint (including metadata validation),
 all root tests, Python mock-runner tests, and the CI evidence-gate regression
 suite. They need neither Docker nor LLM credentials. Tests execute for real;

@@ -4,7 +4,7 @@
 
 ## Quick start
 
-必要: Node.js **22+**、pnpm **11.19.0**。MAFの実行にはPython **3.11+**。DockerとLLM credentialは任意です。
+必要: Node.js **22+**、pnpm **11.19.0**。MAFとDecision Workbenchの実行にはPython **3.11+**。DockerとLLM credentialは任意です。
 
 ```sh
 pnpm install
@@ -17,6 +17,7 @@ Portal: http://localhost:5173 。`pnpm dev`はPortalだけを起動します。D
 pnpm demo:dev mcp-apps-playground
 pnpm demo:dev maf-magentic-scrum
 pnpm demo:dev openfga-sharing-playground
+pnpm demo:dev decision-workbench
 ```
 
 | Demo | URL | Default | Optional setup |
@@ -24,10 +25,11 @@ pnpm demo:dev openfga-sharing-playground
 | [MCP Apps Playground](demos/mcp-apps-playground/README.md) | http://localhost:5174 | Real MCP / Apps bridge + mock experiment results | External MCP Apps host |
 | [MAF Magentic Scrum](demos/maf-magentic-scrum/README.md) | http://localhost:5175 | Scripted mock agents + actual Python fixture tests | Python SDK + OpenAI API key for live Magentic |
 | [OpenFGA Sharing Playground](demos/openfga-sharing-playground/README.md) | http://localhost:5176 | Local mock authorization evaluator | Docker OpenFGA for live checks |
+| [Decision Workbench](demos/decision-workbench/README.md) | http://localhost:5177 | Real local ModernBERT / GLiClass inference after setup | Dedicated Python venv + public model downloads; no API credential |
 
 各DemoのOpen Demoリンクは起動を代行しません。先に対応commandを実行してください。各serverはloopbackでlistenします。初期データとmock/liveの区別はUIにも表示します。
 
-環境のproxyやlocalhost名前解決で接続できない場合は、同じportの`http://127.0.0.1:5173`（各Demoは5174〜5176）を使用してください。
+環境のproxyやlocalhost名前解決で接続できない場合は、同じportの`http://127.0.0.1:5173`（各Demoは5174〜5177）を使用してください。
 
 ## Repository tree
 
@@ -38,7 +40,8 @@ tech-playground/
 ├─ demos/                         Flat, demo-first vertical slices
 │  ├─ mcp-apps-playground/         MCP server / UI resource / local host
 │  ├─ maf-magentic-scrum/          Python orchestrator / fixture / trajectory UI
-│  └─ openfga-sharing-playground/  Model / server / sharing UI / Docker compose
+│  ├─ openfga-sharing-playground/  Model / server / sharing UI / Docker compose
+│  └─ decision-workbench/         Local classifiers / editable criteria / paired fixtures
 ├─ packages/
 │  ├─ demo-schema/                Shared Zod Demo / DemoStatus + search
 │  └─ playground-ui/              Optional Material UI theme and presentation components
@@ -80,7 +83,7 @@ Demo name、id、試したいこと、template、tagsを入力します。日本
 
 ## Metadata and Portal
 
-Portalと3つのDemoはMaterial UIを使い、濃い紺〜青紫のprimaryと薄いグレーのsecondaryで統一しています。`@playground/ui`はtheme・panel・shellなど表示だけを共有する任意のpackageです。新しいDemoにReactやこのpackageの採用を要求せず、backend/runtimeは各Demoに閉じています。
+Portalと4つのDemoはMaterial UIを使い、濃い紺〜青紫のprimaryと薄いグレーのsecondaryで統一しています。`@playground/ui`はtheme・panel・shellなど表示だけを共有する任意のpackageです。新しいDemoにReactやこのpackageの採用を要求せず、backend/runtimeは各Demoに閉じています。
 
 source of truthは`demos/*/demo.yaml`。`packages/demo-schema`のZod schemaをCLI・validation・Portalが共用します。READMEは各Demo rootから読み込みます。schemaはidとdirectoryの一致、status、HTTP(S) URL、実在日付、日付順序を検証します。
 
@@ -101,6 +104,7 @@ source of truthは`demos/*/demo.yaml`。`packages/demo-schema`のZod schemaをCL
 | MCP Apps | 「プロンプト比較」と「構造化データ抽出」でそれぞれtoolを呼ぶ | 同じUI resourceが、tool resultのフォーム定義に応じて異なる入力欄を表示する。UI操作がさらにtoolを呼ぶ。 |
 | Magentic Scrum | Mockのtest failureを実行し、Replayする | Managerのagent選択、fixtureへのtool calls、replanまでの経路がeventごとに変わる。 |
 | OpenFGA Sharing | Bobの編集権限をCheckし、Bob → Team Xの線を削除して再Checkする | 間接的な認可経路が緑で表示され、関係を切ると権限が変わる。 |
+| Decision Workbench | 日英の問題を選び、基準や情報を編集して2モデルで判定する | 知識を必要とする判断・情報不足・誤判定と、候補scoreと正誤の違いを観察する。 |
 
 MCP AppsはHTMLをtool resultに直接埋め込む仕組みではありません。このDemoではtool定義がUI resourceを参照し、hostがそのHTMLを取得して、別途返された`structuredContent`をUIへ渡します。フォーム定義のJSON形式はこのDemo独自です。
 
@@ -120,6 +124,9 @@ Pythonの意味のある挙動確認は別commandです:
 ```sh
 cd demos/maf-magentic-scrum
 python -m unittest -v test_runner
+# Decision Workbench directoryでは、モデル取得なしでAPI/fixtureを検証:
+cd ../decision-workbench
+python -m unittest -v test_contract
 ```
 
 任意のintegration checks（Demo server起動後）:
@@ -135,6 +142,8 @@ pnpm exec tsx tests/integration.ts
 OpenFGAの実server検証には、Dockerのない環境で公式Windows binary **v1.20.0**を使用しています（composeも同version）。Docker compose自体とMAFのcredentialを使った実LLM runは未検証です。変更後の動作確認には上記のchecksと、各DemoのThings to tryを使ってください。
 
 credentialやDockerがなくてもroot install/build/typecheck/lintとPortalは利用可能です。Python依存はpnpm installから導入しません。MAF mockは標準ライブラリだけ、live dependenciesはそのDemoのrequirements.txtから任意で導入します。
+
+Decision Workbenchは専用venvと公開モデルの初回ダウンロードが必要です。[Demoのセットアップ手順](demos/decision-workbench/README.md#run)を実行してください。未セットアップでも画面は開けますが、架空の判定結果へフォールバックせず準備状況を表示します。
 
 ## Scope and limitations
 
@@ -152,7 +161,7 @@ credentialやDockerがなくてもroot install/build/typecheck/lintとPortalは�
 1. MCP: フォームを実LLM experimentへつなぎ、handle storeをSQLiteへ移してserver再起動後も継続する。
 2. Magentic: live trajectoryを複数保存してround/stall/replanを比較し、human plan revisionを加える。
 3. OpenFGA: nested teams、conditional tuples、ListObjects、モデル変更の回帰テスト。
-4. [Decision Workbench案](docs/decision-workbench-proposal.md): ModernBERT-Large-Instruct / GLiClass-Instructで分類・条件適合・情報不足を比較する。まだ提案段階で、4つ目のDemoは未実装。
+4. [Decision Workbench](demos/decision-workbench/README.md): 日英のfixtureを増やし、正解率と情報不足の検出を比較。候補順序・基準表現を変えたときの頑健さを調べる。[元の企画](docs/decision-workbench-proposal.md)。
 
 ## Delivery and agent workflow
 
