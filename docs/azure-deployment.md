@@ -87,7 +87,7 @@ GitHub Actionsのimage build/pushとAzure deploymentは次の段階です。Azur
 
 ## 検証状況
 
-この準備ではAzure resourceを作成していません。Bicepのlocal compileを確認し、Dockerがない作業環境ではcontainer build/runtime検証は未実施です。公開前に上記のlocal container確認、Azure validation/what-if、deploy後のhealth/detail確認を行ってください。
+この準備ではAzure resourceを作成していません。Bicepのlocal compileを確認し、Dockerがない作業環境ではcontainer build/runtime検証は未実施です。`.github/workflows/portal-container.yml`の`container-check` jobでimage build、health、SPA fallback、non-root userを検証します。初回push後のCI結果は別途確認が必要です。このworkflowはimageのpublishやAzure deploymentを行いません。公開前にAzure validation/what-ifと、deploy後のhealth/detail確認も行ってください。
 
 ## References
 

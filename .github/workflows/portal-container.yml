@@ -1,0 +1,62 @@
+name: Portal container
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/portal-container.yml'
+      - 'infra/azure/**'
+      - 'apps/portal/**'
+      - 'packages/demo-schema/**'
+      - 'packages/playground-ui/**'
+      - 'tools/metadata.ts'
+      - 'demos/*/demo.yaml'
+      - 'demos/*/README.md'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
+  pull_request:
+    paths:
+      - '.github/workflows/portal-container.yml'
+      - 'infra/azure/**'
+      - 'apps/portal/**'
+      - 'packages/demo-schema/**'
+      - 'packages/playground-ui/**'
+      - 'tools/metadata.ts'
+      - 'demos/*/demo.yaml'
+      - 'demos/*/README.md'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build Portal image
+        run: docker build --file infra/azure/portal.Dockerfile --tag tech-playground-portal:check .
+      - name: Run Portal and verify health, SPA, and non-root user
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name portal-check --publish 127.0.0.1:8088:8080 tech-playground-portal:check
+          curl --fail --silent --show-error --retry 15 --retry-delay 1 --retry-connrefused --retry-all-errors http://127.0.0.1:8088/healthz | grep -qx 'ok'
+          curl --fail --silent --show-error http://127.0.0.1:8088/ > /tmp/portal-home.html
+          curl --fail --silent --show-error http://127.0.0.1:8088/demos/mcp-apps-playground > /tmp/portal-detail.html
+          grep -q 'id="root"' /tmp/portal-home.html
+          cmp /tmp/portal-home.html /tmp/portal-detail.html
+          test "$(docker exec portal-check id -u)" != '0'
+      - name: Container logs
+        if: always()
+        run: docker logs portal-check || true
+      - name: Clean up container
+        if: always()
+        run: docker rm --force portal-check || true
