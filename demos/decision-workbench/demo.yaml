@@ -1,7 +1,7 @@
 id: decision-workbench
 title: Decision Workbench
 status: exploring
-summary: 日本語・英語の同じ問いをローカル分類モデル、既存Codex、任意のLLM API、Jevへ渡し、分類・基準判定・情報の十分性を比較する実験。
+summary: 分類・基準判定・情報の十分性をJev、既存LLM、ローカルモデルで比較し、一つのIssueへの複数質問をbatchとsequentialで試す実験。
 goal: ModernBERT、GLiClass、公式System One Adapter経由のLLM、直接接続するJevを同じ課題で比較し、明示情報・一般知識・情報不足とscoreの意味を観察する。
 questions:
   - 鶏がらスープがヴィーガン基準に違反するという一般知識を使えるか
@@ -12,9 +12,13 @@ questions:
   - モデル固有のscoreと実際の正しさを混同せず比較できるか
   - 同じChoice APIで一般LLMへ判定を依頼すると、選択結果・遅延・scoreがどう異なるか
   - Jevへの直接接続と一般LLMのadapter経由で、同じ基準への判定がどう変わるか
-tags: [zero-shot, text-classification, decision, masked-language-model, multilingual, local-inference, system-one-adapter, jev]
+  - 同じIssueへの独立した1・4・8・16問をまとめると、回答・API呼び出し回数・待ち時間がどう変わるか
+tags: [zero-shot, text-classification, decision, masked-language-model, multilingual, local-inference, system-one-adapter, jev, issue-triage, fan-out]
 stack: [python, pytorch, transformers, modernbert, gliclass, system-one-adapter, typesafe-sdk, react, material-ui, vite]
 findings:
+  - 同日の単回sweepでは、Jevの1・4・8・16問batchは各1 SDK呼び出しで約0.49〜0.58秒だった。16問の参考回答一致はJevが11/12、Codex gpt-6-astraが12/12で、一般的な速度・精度の保証ではない。
+  - 2026-09-21のIssue triage 16問では、Jev batchが1回2307.78ms、sequentialが16回合計9581.68msで、両方とも参考回答12問中11問一致した。batchは初回SDK準備を含む単発の観測。
+  - 2026-09-21のJev直接接続では、返却モデルjev-1.13.0が日本語6fixtureの参考回答と6件一致した。単問API往復の中央値は544.28msであり、16問batch実験や純粋な推論速度の測定ではない。
   - 2026-09-21のCPU動作確認では、日本語の鶏がらスープを両モデルが誤判定し、GLiClassは候補score 0.941だった。高いscoreは正解確率ではない。
   - 同日のSystem One AdapterとCodex gpt-6-astraによる日本語3例では、鶏がらは違反、由来不明のだしは情報不足、植物由来を明記すると適合になった。少数の動作確認であり一般的な精度の保証ではない。
 references:
@@ -32,6 +36,8 @@ references:
     url: https://github.com/typesafe-ai/system-one-adapter-python
   - title: Official TypeSafe documentation
     url: https://docs.typesafe.ai/
+  - title: TypeSafe speculative fan-out
+    url: https://docs.typesafe.ai/patterns/fan-out
 app:
   url: http://localhost:5177
 createdAt: 2026-09-21

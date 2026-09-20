@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Checkbox, Chip, CircularProgress, Divider, FormControlLabel, LinearProgress, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
+import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Checkbox, Chip, CircularProgress, Divider, FormControlLabel, LinearProgress, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tab, Tabs, TextField, Typography } from '@mui/material';
 import { Eyebrow, LabIcon, LabShell, LabTheme, Panel } from '@playground/ui';
 import { elapsed, isPristine, scoreLabel, taskFrom, type Config, type Language, type ModelId, type Mode, type Result, type Run, type Task } from './types';
 import './style.css';
+import { TriageWorkbench } from './TriageWorkbench';
 
 const modeLabels: Record<Mode, string> = { classification: 'Classification / 分類', criteria: 'Criteria / 基準への適合', sufficiency: 'Sufficiency / 情報の十分性' };
 const engineIds: ModelId[] = ['jev', 'llm-adapter', 'modernbert', 'gliclass'];
@@ -52,7 +53,7 @@ function InputComparison({ current, previous, run, previousRun, inputIndex }: { 
   </Panel>;
 }
 
-function Workbench() {
+function Workbench({ navigation }: { navigation: ReactNode }) {
   const [config, setConfig] = useState<Config>({ models: [], fixtures: [] });
   const [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [draft, setDraft] = useState<Task>(blank), [fixtureId, setFixtureId] = useState('');
@@ -95,7 +96,7 @@ function Workbench() {
     setStarting(true); setError('');
     try { const inputs = batch ? languageFixtures.map(item => ({ ...taskFrom(item), fixtureId: item.id, expectedOptionId: item.expectedOptionId })) : [snapshot()]; const next = await api<Run>('/api/runs', { inputs, models: [...models] }); setJob(next); setViewId(null); setInputIndex(0); } catch (reason) { setError(String(reason)); } finally { setStarting(false); }
   }
-  return <LabShell number="04" title="Decision Workbench" subtitle="分類・基準判定・情報の十分性。同じ問いを判断APIやローカルモデルに渡し、入力の変化が判断にどう現れるか観察する。" actions={<Chip label="REAL INFERENCE" variant="outlined" />}>
+  return <LabShell number="04" title="Decision Workbench" subtitle="分類・基準判定・情報の十分性。同じ問いを判断APIやローカルモデルに渡し、入力の変化が判断にどう現れるか観察する。" actions={navigation}>
     {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
     <Box className="workbench-toolbar"><Box><Eyebrow>COMPARE DECISION ENGINES</Eyebrow><Typography variant="body2" color="text.secondary">JevはTypesafeの判断APIを呼び出します。比較用のSystem One Adapterは同じAPI形式で設定したLLMを利用し、Jevのモデル・速度・校正性能を再現するものではありません。</Typography><Typography variant="caption" color="text.secondary">Jev確率・LLM生成確率・候補scoreと、参照解への一致は別の指標です。engine間のscoreをそのまま比較しないでください。</Typography></Box><Button variant="outlined" disabled={loading || !!busy} onClick={() => void refreshConfig()}>{loading ? 'Checking setup…' : 'Refresh model setup'}</Button></Box>
     <Box className="workbench-layout">
@@ -134,4 +135,10 @@ function Workbench() {
   </LabShell>;
 }
 
-createRoot(document.getElementById('root')!).render(<LabTheme><Workbench /></LabTheme>);
+function App() {
+  const [tab, setTab] = useState<'triage' | 'single'>('triage');
+  const navigation = <Tabs className="decision-tabs" value={tab} onChange={(_event, value) => setTab(value)} aria-label="Decision Workbench mode"><Tab value="triage" label="Issue triage" /><Tab value="single" label="Single decision" /></Tabs>;
+  return <LabTheme><Box hidden={tab !== 'triage'}><TriageWorkbench navigation={navigation} /></Box><Box hidden={tab !== 'single'}><Workbench navigation={navigation} /></Box></LabTheme>;
+}
+
+createRoot(document.getElementById('root')!).render(<App />);

@@ -64,8 +64,8 @@ testing:
       always: true
     - id: decision-workbench-contract
       type: regression
-      command: python -m unittest -v test_contract test_adapter test_codex_provider test_jev
+      command: python -m unittest -v test_contract test_adapter test_codex_provider test_jev test_triage
       cwd: demos/decision-workbench
-      description: Decision input validation, fixture answers, and edited-input expectations without model downloads
+      description: Decision and triage validation, provider boundaries, batch/sequential execution and fixture references without model downloads
       required: true
       always: true

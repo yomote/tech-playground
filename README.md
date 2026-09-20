@@ -41,7 +41,7 @@ tech-playground/
 │  ├─ mcp-apps-playground/         MCP server / UI resource / local host
 │  ├─ maf-magentic-scrum/          Python orchestrator / fixture / trajectory UI
 │  ├─ openfga-sharing-playground/  Model / server / sharing UI / Docker compose
-│  └─ decision-workbench/         LLM adapter / local classifiers / paired fixtures
+│  └─ decision-workbench/         Jev / LLM adapter / local classifiers / Issue triage
 ├─ packages/
 │  ├─ demo-schema/                Shared Zod Demo / DemoStatus + search
 │  └─ playground-ui/              Optional Material UI theme and presentation components
@@ -104,7 +104,7 @@ source of truthは`demos/*/demo.yaml`。`packages/demo-schema`のZod schemaをCL
 | MCP Apps | 「プロンプト比較」と「構造化データ抽出」でそれぞれtoolを呼ぶ | 同じUI resourceが、tool resultのフォーム定義に応じて異なる入力欄を表示する。UI操作がさらにtoolを呼ぶ。 |
 | Magentic Scrum | Mockのtest failureを実行し、Replayする | Managerのagent選択、fixtureへのtool calls、replanまでの経路がeventごとに変わる。 |
 | OpenFGA Sharing | Bobの編集権限をCheckし、Bob → Team Xの線を削除して再Checkする | 間接的な認可経路が緑で表示され、関係を切ると権限が変わる。 |
-| Decision Workbench | 日英の問題を選び、基準や情報を編集してLLMとローカル分類モデルを比較する | 知識を必要とする判断・情報不足・誤判定と、候補scoreと正誤の違いを観察する。 |
+| Decision Workbench | 日英の問題やIssueの判断基準を編集し、Jev・LLM・ローカル分類モデルを比較する | 知識・情報不足・誤判定に加え、同じIssueへの1 / 4 / 8 / 16問をまとめた場合と1問ずつ呼ぶ場合の答え・回数・待ち時間を観察する。 |
 
 MCP AppsはHTMLをtool resultに直接埋め込む仕組みではありません。このDemoではtool定義がUI resourceを参照し、hostがそのHTMLを取得して、別途返された`structuredContent`をUIへ渡します。フォーム定義のJSON形式はこのDemo独自です。
 
@@ -126,7 +126,7 @@ cd demos/maf-magentic-scrum
 python -m unittest -v test_runner
 # Decision Workbench directoryでは、モデル取得なしでAPI/fixtureを検証:
 cd ../decision-workbench
-python -m unittest -v test_contract test_adapter test_codex_provider test_jev
+python -m unittest -v test_contract test_adapter test_codex_provider test_jev test_triage
 ```
 
 任意のintegration checks（Demo server起動後）:
@@ -161,7 +161,7 @@ Decision WorkbenchのJev本体は`demos/decision-workbench/.env`の`TYPESAFE_API
 1. MCP: フォームを実LLM experimentへつなぎ、handle storeをSQLiteへ移してserver再起動後も継続する。
 2. Magentic: live trajectoryを複数保存してround/stall/replanを比較し、human plan revisionを加える。
 3. OpenFGA: nested teams、conditional tuples、ListObjects、モデル変更の回帰テスト。
-4. [Decision Workbench](demos/decision-workbench/README.md): 日英のfixtureを増やし、正解率と情報不足の検出を比較。候補順序・基準表現を変えたときの頑健さを調べる。[元の企画](docs/decision-workbench-proposal.md)。
+4. [Decision Workbench](demos/decision-workbench/README.md): Issue triageのbatch / sequentialを同条件で繰り返し、質問数とAPI往復時間・回答の変化を観察。日英fixtureや候補順序・基準表現も変えて頑健さを調べる。[元の企画](docs/decision-workbench-proposal.md)。
 
 ## Delivery and agent workflow
 

@@ -52,13 +52,17 @@ def jev_status():
 async def _request(config, payload):
     from typesafe_sdk import AsyncTypeSafeClient, Choice, RetryPolicy
 
+    questions = payload.get("questions")
+    if questions is None:
+        questions = {"decision": {"instructions": payload["instructions"], "criteria": payload["criteria"]}}
     # Explicit endpoint keeps unrelated environment settings from redirecting this key.
     async with AsyncTypeSafeClient(api_key=config["api_key"], model=config["model"],
                                    base_url="https://api.typesafe.ai", timeout=_TIMEOUT_SECONDS,
                                    retry=RetryPolicy(max_retries=0)) as client:
         response = await client.system_one(
             state=payload["state"],
-            questions={"decision": Choice(instructions=payload["instructions"], criteria=payload["criteria"])},
+            questions={name: Choice(instructions=question["instructions"], criteria=question["criteria"])
+                       for name, question in questions.items()},
         )
         return response.model_dump()
 

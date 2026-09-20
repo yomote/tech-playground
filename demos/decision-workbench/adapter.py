@@ -172,6 +172,9 @@ def _anthropic_credentials(api_key):
 async def _request(config, payload):
     from system_one_adapter import AsyncSystemOneAdapterClient, Choice, RetryPolicy
 
+    questions = payload.get("questions")
+    if questions is None:
+        questions = {"decision": {"instructions": payload["instructions"], "criteria": payload["criteria"]}}
     if config["DEMO_LLM_PROVIDER"] == "codex":
         from codex_provider import make_codex_provider
 
@@ -187,7 +190,7 @@ async def _request(config, payload):
         from system_one_adapter.providers.anthropic import AsyncAnthropicProvider
 
         with _anthropic_credentials(config["DEMO_LLM_API_KEY"]):
-            provider = AsyncAnthropicProvider(config["DEMO_LLM_MODEL"], max_tokens=1024)
+            provider = AsyncAnthropicProvider(config["DEMO_LLM_MODEL"], max_tokens=max(1024, 256 * len(questions)))
     try:
         async with AsyncSystemOneAdapterClient(
             structured_outputs=True, llm_answer_mode="probabilities", normalize_probabilities=False,
@@ -195,7 +198,8 @@ async def _request(config, payload):
         ) as client:
             response = await client.system_one(
                 state=payload["state"],
-                questions={"decision": Choice(instructions=payload["instructions"], criteria=payload["criteria"])},
+                questions={name: Choice(instructions=question["instructions"], criteria=question["criteria"])
+                           for name, question in questions.items()},
                 model=provider,
             )
             return response.model_dump()

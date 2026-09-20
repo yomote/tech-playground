@@ -113,6 +113,37 @@ def execute_run(run_id: str):
             runs[run_id].update(status='failed', error=str(error))
 
 
+def execute_triage_run(run_id: str):
+    """Use the same worker gate/run store as single-decision experiments."""
+    import triage
+    with run_lock:
+        request = deepcopy(runs[run_id])
+
+    def phase_finished(phase):
+        with run_lock:
+            runs[run_id]['results'].append(deepcopy(phase))
+
+    def progress_changed(progress):
+        with run_lock:
+            runs[run_id]['progress'] = progress
+
+    try:
+        triage.execute(request, phase_finished, progress_changed)
+        with run_lock:
+            run = runs[run_id]
+            run['status'] = 'completed' if any(phase['status'] != 'error' for phase in run['results']) else 'failed'
+            if run['status'] == 'failed':
+                run['error'] = 'No successful decisions. Check the per-call errors and provider setup.'
+            run['finishedAt'] = datetime.now(timezone.utc).isoformat()
+            completed = deepcopy(run)
+        (ROOT / 'runs').mkdir(exist_ok=True)
+        (ROOT / 'runs' / f'{run_id}.json').write_text(json.dumps(completed, ensure_ascii=False, indent=2), encoding='utf-8')
+    except Exception:
+        with run_lock:
+            runs[run_id].update(status='failed', error='Triage execution or run persistence failed.',
+                                finishedAt=datetime.now(timezone.utc).isoformat())
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT / 'dist'), **kwargs)
@@ -127,6 +158,11 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == '/api/triage/config':
+            import triage
+            from inference import model_status
+            return self.respond_json({'models': [model for model in model_status() if model['id'] in triage.MODELS],
+                                      'preset': triage.preset()})
         if self.path == '/api/config':
             from inference import model_status
             return self.respond_json({'models': model_status(), 'fixtures': fixtures()})
@@ -141,13 +177,18 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.headers.get('Origin') not in (None, 'http://127.0.0.1:5177', 'http://localhost:5177'):
             return self.respond_json({'error': 'Local origin required'}, 403)
-        if self.path != '/api/runs':
+        if self.path not in ('/api/runs', '/api/triage/runs'):
             return self.respond_json({'error': 'Not found'}, 404)
         try:
             length = int(self.headers.get('Content-Length', '0'))
             if not 0 < length <= 1024 * 1024:
                 raise ValueError('Request size must be between 1 byte and 1 MiB')
-            request = validate_request(json.loads(self.rfile.read(length)))
+            is_triage = self.path == '/api/triage/runs'
+            if is_triage:
+                import triage
+                request = triage.validate_request(json.loads(self.rfile.read(length)))
+            else:
+                request = validate_request(json.loads(self.rfile.read(length)))
             with run_lock:
                 if any(run['status'] == 'running' for run in runs.values()):
                     return self.respond_json({'error': 'Wait for the active experiment to finish'}, 409)
@@ -155,9 +196,13 @@ class Handler(SimpleHTTPRequestHandler):
                     del runs[next(iter(runs))]
                 run_id = str(uuid.uuid4())
                 run = dict(id=run_id, status='running', createdAt=datetime.now(timezone.utc).isoformat(), results=[], **request)
+                if is_triage:
+                    run.update(kind='triage', progress={'completedCalls': 0, 'totalCalls': sum(
+                        1 if phase['strategy'] == 'batch' else phase['questionCount'] for phase in triage.make_plan(request)),
+                        'current': 'Starting'})
                 runs[run_id] = run
                 snapshot = deepcopy(run)
-            threading.Thread(target=execute_run, args=(run_id,), daemon=True).start()
+            threading.Thread(target=execute_triage_run if is_triage else execute_run, args=(run_id,), daemon=True).start()
             self.respond_json(snapshot, 202)
         except (ValueError, TypeError) as error:
             self.respond_json({'error': str(error)}, 400)

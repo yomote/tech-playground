@@ -9,6 +9,7 @@ ModernBERT、GLiClass、既存のCodex環境または任意のLLM API、Jevへ�
 - 「CSVエクスポートボタンを追加」という依頼を機能追加に分類できても、実装に必要な条件は不足していると区別できるか。
 - 受け入れ基準を本文へ追加した場合や、同じ内容を日本語・英語で入力した場合に、順位と選択がどう変わるか。
 - ローカル分類モデルと、System One AdapterのChoice APIから呼ぶLLMで、結果と待ち時間がどう違うか。
+- 一つのIssueに独立した16の問いをまとめて渡したとき、1問ずつ呼ぶ場合と答え・API呼び出し回数・待ち時間がどう変わるか。
 
 「分類」「基準判定」「情報の十分性」は問いの作り方が違います。専用の論理検証器が動くわけではありません。選択肢に「情報不足」を置くことも、モデルによる正しい保留判断を保証しません。
 
@@ -96,7 +97,7 @@ Linuxでは`.venv/bin/python`を使います。設定後はDemo serverを再起�
 
 Jevを利用できるTypeSafeアカウントとAPIキーが必要です。入力文・問い・基準・候補はTypeSafeへ送信されます。キーはDemoの`.env`へ保存し、ブラウザ、git、run JSONへ含めません。未設定・アクセス不可の場合はsetup不足またはエラーを表示し、他の実行対象には影響しません。
 
-**Jevへの実接続は未確認です。** 設定方法と直接接続経路の追加を、判定結果や速度の検証と混同しません。表示時間はネットワークを含むAPI往復時間であり、Jev内部の純粋なモデル推論時間ではありません。Jevが返すscoreも、ローカルsoftmaxやLLMの自己申告分布と同一の尺度とみなさず、このfixtureでの選択結果を確認します。
+**Jevへの実接続は`jev-1.13.0`で確認済みです。** 日本語6fixtureの結果と呼び出し時間をFindingsに記録しています。表示時間はネットワークを含むAPI往復時間であり、Jev内部の純粋なモデル推論時間ではありません。Jevが返すscoreも、ローカルsoftmaxやLLMの自己申告分布と同一の尺度とみなさず、このfixtureでの選択結果を確認します。
 
 ### 任意: System One Adapterと既存LLM
 
@@ -127,8 +128,31 @@ OpenAI互換/Anthropicを使う場合は使用するservice/modelとDemo専用cr
 
 ```sh
 cd demos/decision-workbench
-python -m unittest -v test_contract test_adapter test_codex_provider
+python -m unittest -v test_contract test_adapter test_codex_provider test_jev test_triage
 ```
+
+### Issue triage: 一つの入力に複数の問いを渡す
+
+初期Issueは次の報告です。
+
+> 昨日の更新後から、チームメンバーが共有フォルダのCSVを出力できません。管理者では成功します。月末処理が止まっています。手順とエラーログは添付していません。
+
+同じ本文を共有`state`にし、16個の独立したChoiceで複数の観点を判定します。前の回答を次の質問の入力にはしません。本文と判断基準を編集し、先頭から何問使うかを1 / 4 / 8 / 16から選びます。Jev直接接続と、既存のSystem One Adapter接続先の両方で、同じ本文・問い・候補を比較できます。ローカル2モデルはこの複数質問実験の対象外です。
+
+収録する問いは、Issueの種別、調査領域、業務影響、更新による退行の疑い、役割による差、再現手順、ログ、回避策、期限、データ消失、影響範囲、情報漏えい、返金要求、バージョン、対象リソース、次の調査行動です。本文の事実を問う12問には参考回答を用意し、判断が分かれ得る調査領域・業務影響・退行の疑い・次の行動の4問には固定の正解を置きません。
+
+| 実行モード | 1実行対象あたりの呼び出し方 | 観察すること |
+| --- | --- | --- |
+| batch | 選択したN問を1回の要求にまとめる | 一つの入力から複数の判定を得る |
+| sequential | 1問ずつ、順番にN回要求する | 往復回数と合計の待ち時間、batchとの回答の違い |
+| compare | 同じN問をbatchとsequentialの両方で実行する | 内容を揃えたときの判定・回数・時間の差 |
+| sweep | batchを1 / 4 / 8 / 16問で1回ずつ実行する | 質問数を増やしたときの応答時間の変化 |
+
+TypeSafe公式の[speculative fan-out](https://docs.typesafe.ai/patterns/fan-out)は、同じ入力への複数の問いを一つの要求で並列評価し、関連する結果を後からコードで選ぶ使い方を説明しています。このDemoではChoiceに揃えて観察します。公式説明は、この端末・入力・接続先で一定の応答時間が得られることを保証しません。
+
+測定にはAPI通信とSDK準備、Codexを使う場合はCLI起動も含みます。純粋なモデル計算時間ではなく、初回準備、実行順、ネットワークやサービスの混雑でも変化します。**batch内の各質問に個別の処理時間は割り当てません。** 合計時間を質問数で割っても、内部の1問の推論時間にはなりません。
+
+参考回答は既定のIssueと問いに対する比較用です。入力や質問・基準を編集すると参考回答との比較を解除します。ブラウザから任意の参考回答を渡して一致率を上書きする構造にはしていません。判定結果は自動的なIssue割り当て・修正・通知には使用しません。
 
 ## Things to try
 
@@ -140,8 +164,33 @@ python -m unittest -v test_contract test_adapter test_codex_provider
 6. 期待値が外れたrunのJSONを残す。入力言語、選択肢、モデル、初回/再実行を揃えて再現し、`Findings`へ観察条件とともに追記する。
 7. LLM APIを設定したら`llm-adapter`で同じfixtureを試す。adapterのChoice分布とローカルのsoftmaxを区別し、選択結果・待ち時間・エラーを比較する。
 8. Jevのキーを設定したら`jev`で同じfixtureを試す。直接Jevを呼んだ結果と、一般LLMをadapter経由で呼んだ結果を分けて記録する。外部APIの往復時間をローカルの純粋な推論時間と同一条件の速度比較にしない。
+9. **Issue triage**を4問の`batch`から始め、同じ4問の`compare`で回答と呼び出し回数を比べる。Jevと既存LLMに同じpayloadを渡しても、推論方式やscoreの意味まで同じになるわけではない。
+10. `sweep`で1 / 4 / 8 / 16問へ増やす。同じ条件で再実行し、初回と後続の結果を分けて残す。1回の観測だけで「質問数を増やしても速度一定」と結論づけない。
+11. Issueに再現手順やエラーログを追記し、必要な情報に関する判定が変わるか観察する。管理者と一般メンバーの差だけで、原因が認可処理だと断定していないかも見る。
 
 ## Findings
+
+2026-09-21、公式SDKから直接呼んだJevの返却モデルは`jev-1.13.0`でした。日本語の既存6fixtureは参考回答と**6 / 6一致**しました。この6件を単問で順次呼んだAPI往復時間は506.06〜616.19 ms、中央値544.28 msでした。それより前の初回単問は3,436.77 msです。SDK準備と通信を含む少数の動作確認であり、純粋なモデル推論時間や一般的な精度・速度を示すbenchmarkではありません。この結果は、次のIssue triageの複数質問比較とは別の観測です。
+
+同日、ブラウザから既定Issueの16問を`jev-1.13.0`の`compare`で実行しました。
+
+| 方式 | API呼び出し回数 | 呼び出し合計時間 | 参考回答への一致 |
+| --- | --- | --- | --- |
+| batch | 1 | 2,307.78 ms | 11 / 12 |
+| sequential | 16 | 9,581.68 ms | 11 / 12 |
+
+判断が分かれ得る4問は一致率に含めていません。両方式とも、具体的な対応期限の問いで`unknown`（期限が書かれていない）を期待したところ、`no`（期限を定めないと明記）を選びました。「記載がない」と「ないと明記されている」を区別する基準でも、誤りが残る例です。batchはserver再起動後の初回SDK準備を含みます。この1回の順序付き観測だけで、一般的な速度比や同等の精度を保証しません。
+
+続けて同じserverで、JevとSystem One Adapter → Codex `gpt-6-astra`の`sweep`をブラウザから実行しました。各行・各実行対象は1 SDK呼び出しで、すべて正常完了しました。
+
+| 質問数 | Jevの時間 | Jevの参考回答一致 | Codex経由の時間 | Codexの参考回答一致 |
+| --- | --- | --- | --- | --- |
+| 1 | 584.45 ms | 1 / 1 | 5,758.81 ms | 1 / 1 |
+| 4 | 547.86 ms | 1 / 1 | 8,221.05 ms | 1 / 1 |
+| 8 | 516.39 ms | 5 / 5 | 12,767.58 ms | 5 / 5 |
+| 16 | 490.90 ms | 11 / 12 | 16,168.85 ms | 12 / 12 |
+
+質問数と採点数が違うのは、判断課題の4問に固定の正解を置かないためです。16問時のJevの不一致は同じ期限の問いでした。Jevはこの1回のsweepでは約0.49〜0.58秒でしたが、質問数を増やしても時間が一定になることや、この順序で速くなることを保証しません。Jev側のSDK importは前の実行で済んでおり、各API通信・SDK準備、Codex側のCLI起動を含みます。実行順、初回状態、ネットワーク・サービス混雑の異なる比較であり、純粋なモデル計算速度や一般的な精度の順位を示す表ではありません。
 
 2026-09-21、Windows / Python 3.11.9 / PyTorch 2.10.0+cpu / CPU 4 threadsで、上記固定revisionのローカル2モデルを実行しました。Transformers 5.17.0、GLiClass 0.1.20を使用しています。以下は3件の動作確認であり、精度・速度benchmarkではありません。数値は選ばれた候補のscoreです。**System One Adapter経由のLLMの結果は、この表には含みません。**
 
@@ -178,6 +227,7 @@ Adapterの要求は60秒でタイムアウトします。Codexのキャンセル
 - [GLiClass-Instruct Base official model card](https://huggingface.co/knowledgator/gliclass-instruct-base-v1.0)
 - [TypeSafe official System One Adapter](https://github.com/typesafe-ai/system-one-adapter-python)
 - [TypeSafe official documentation](https://docs.typesafe.ai/)
+- [TypeSafe speculative fan-out](https://docs.typesafe.ai/patterns/fan-out)
 - [Codex non-interactive execution](https://developers.openai.com/codex/noninteractive)
 - [Codex authentication](https://developers.openai.com/codex/auth)
 

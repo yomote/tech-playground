@@ -35,7 +35,7 @@ group membership and folder inheritance. The explanation graph is local model
 traversal, not a server-native decision trace. tests/integration.ts currently
 couples OpenFGA and MAF HTTP checks; split it before registering independent jobs.
 
-Decision Workbench adapter changes need test_contract, test_adapter, test_codex_provider, and test_jev without
+Decision Workbench adapter changes need test_contract, test_adapter, test_codex_provider, test_jev, and test_triage without
 credentials. Use the official System One Adapter API and keep provider identity
 visible. Its LLM-generated probabilities are not calibrated Jev probabilities.
 Fixture expectations and human rationales must never enter model requests. Keep
