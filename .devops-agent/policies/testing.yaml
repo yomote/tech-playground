@@ -1,0 +1,4 @@
+allowedCommands: [pnpm, node, python]
+# Finite per-command limit allowing a cold build of all MUI workspaces.
+timeoutMs: 600000
+maxOutputBytes: 1000000

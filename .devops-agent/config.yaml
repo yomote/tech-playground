@@ -1,0 +1,64 @@
+version: 1
+project:
+  name: tech-playground
+provider:
+  type: local-git
+# Explicit base/head SHAs work locally and in CI without GitHub API credentials.
+lifecycle:
+  review: true
+  testPlanning: true
+  testExecution: true
+  releaseAssurance: true
+agents:
+  review:
+    executor: mock
+  testPlanning:
+    executor: mock
+policies:
+  release:
+    requireAllRequiredTests: true
+    requireHumanApproval: false
+testing:
+  discovery:
+    mode: automatic
+  allowedCommands: [pnpm, node, python]
+  # Every change, including the first-commit baseline, runs this complete small suite.
+  # No name filters: new or renamed root tests cannot silently be omitted.
+  commands:
+    - id: root-build
+      type: custom
+      command: pnpm build
+      description: Build Portal, shared packages and all JS/TS Demo UIs
+      required: true
+      always: true
+    - id: root-typecheck
+      type: custom
+      command: pnpm typecheck
+      description: Typecheck root tools/tests and every workspace
+      required: true
+      always: true
+    - id: root-lint
+      type: custom
+      command: pnpm lint
+      description: ESLint and shared metadata validation
+      required: true
+      always: true
+    - id: root-tests
+      type: regression
+      command: pnpm test
+      description: Full root schema/search, scaffolding, MCP, ReBAC and UI behavior suite
+      required: true
+      always: true
+    - id: magentic-scrum-runner
+      type: integration
+      command: python -m unittest -v test_runner
+      cwd: demos/maf-magentic-scrum
+      description: Mock workflow, actual fixture tests, failure/replan and approval boundaries
+      required: true
+      always: true
+    - id: ci-readiness-contract
+      type: regression
+      command: node --test .devops-agent/ci-readiness.test.mjs
+      description: Reject missing or stale evidence and pending manual validation in CI
+      required: true
+      always: true

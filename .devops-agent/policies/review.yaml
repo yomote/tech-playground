@@ -1,0 +1,7 @@
+focus:
+  - bugs and unexpected behavior
+  - authentication and authorization boundaries
+  - security and secret handling
+  - breaking changes and data migration
+  - observability and failure recovery
+  - maintainability beyond formatting

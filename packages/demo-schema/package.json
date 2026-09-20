@@ -1,0 +1,6 @@
+{
+  "name": "@playground/demo-schema", "private": true, "version": "0.1.0", "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": { "build": "tsc --noEmit", "typecheck": "tsc --noEmit" },
+  "dependencies": { "zod": "^4.2.0" }
+}

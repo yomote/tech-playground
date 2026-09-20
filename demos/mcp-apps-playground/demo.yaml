@@ -1,0 +1,26 @@
+id: mcp-apps-playground
+title: MCP Apps Playground
+status: working
+summary: 入力に応じてプロンプト比較・構造化データ抽出のフォームを開き、interactive UIとMCP toolの往復を観察する。
+goal: tool定義のUI resource参照と、structuredContentのフォーム定義・実験データを分けて、App bridgeによる連携を理解する。
+questions:
+  - textだけのtool resultとinteractive UIでは操作の流れがどう変わるか
+  - UIからのtool callと最初のtool resultはどう連携するか
+  - experimentIdを別のMCP connectionから再利用できるか
+  - transportのstatelessとapplication stateはどう違うか
+  - 同じUI resourceでtool入力に応じた複雑なフォームを表示できるか
+tags: [mcp, mcp-apps, interactive-ui, explicit-handles]
+stack: [typescript, mcp-sdk, react, material-ui, vite]
+findings:
+  - HTMLは別のUI resourceとして取得し、tool resultは実験データとDemo独自のフォーム定義を返す。
+  - プロンプト比較は決定的な疑似score、構造化抽出はkey-value行の読み取りで、実LLMは呼び出さない。
+  - transportはsessionIdを持たず、application stateはexperimentIdをキーにしたprocess内Mapに保持する。
+references:
+  - title: Official MCP Apps SDK and specification
+    url: https://github.com/modelcontextprotocol/ext-apps
+  - title: Official basic server example
+    url: https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/basic-server-vanillajs
+app:
+  url: http://localhost:5174
+createdAt: 2026-09-20
+updatedAt: 2026-09-21

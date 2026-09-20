@@ -1,0 +1,9 @@
+services:
+  openfga:
+    image: openfga/openfga:v1.20.0
+    command: run
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      OPENFGA_DATASTORE_ENGINE: memory
+      OPENFGA_PLAYGROUND_ENABLED: "false"

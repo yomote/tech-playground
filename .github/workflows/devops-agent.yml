@@ -1,0 +1,115 @@
+name: DevOps Agent readiness
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base branch to compare against
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devops-readiness-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  readiness:
+    # Required status name: automated evidence, never an assertion of AI review/release approval.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - run: pnpm install --frozen-lockfile
+      - name: Select immutable comparison revisions
+        id: revisions
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          MANUAL_BASE: ${{ inputs.base || 'main' }}
+        run: |
+          head=$(git rev-parse HEAD)
+          baseline=false
+          if [ "$EVENT_NAME" = pull_request ]; then
+            base=$(git rev-parse --verify --end-of-options "$PR_BASE_SHA^{commit}")
+          elif [ "$EVENT_NAME" = workflow_dispatch ]; then
+            base=$(git rev-parse --verify --end-of-options "origin/$MANUAL_BASE^{commit}")
+          elif [[ "$PUSH_BEFORE" =~ ^[0-9a-f]{40}$ ]] && [[ ! "$PUSH_BEFORE" =~ ^0+$ ]] && git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null && git merge-base "$PUSH_BEFORE" "$head" >/dev/null; then
+            base="$PUSH_BEFORE"
+          else
+            # v0.1.1 requires commit refs and a merge base; an empty tree is invalid.
+            # For the first push run every always-required command against HEAD.
+            base="$head"
+            baseline=true
+          fi
+          if [ "$base" = "$head" ]; then baseline=true; fi
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "baseline=$baseline" >> "$GITHUB_OUTPUT"
+      - name: Review, plan, execute registered checks, and assess
+        shell: bash
+        env:
+          EXPECTED_SOURCE: ${{ steps.revisions.outputs.head }}
+          EXPECTED_TARGET: ${{ steps.revisions.outputs.base }}
+          BASELINE_ONLY: ${{ steps.revisions.outputs.baseline }}
+        run: |
+          mkdir -p .artifacts
+          set +e
+          pnpm exec devops-agent run --base "$EXPECTED_TARGET" --head "$EXPECTED_SOURCE" --json > .artifacts/readiness.json
+          result=$?
+          set -e
+          # Fail closed for missing/stale/manual evidence and any other warning.
+          # Only the exact known mock advisory may pass automated checks;
+          # releaseAssessment remains needs-review in report and job summary.
+          node .devops-agent/ci-readiness.mjs .artifacts/readiness.json "$result"
+      - name: Upload readiness evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: devops-agent-readiness-${{ github.run_id }}
+          path: |
+            .artifacts/readiness.json
+            .artifacts/ci-outcome.json
+            .devops-agent/runs/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: warn
+
+  github-settings-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra/github
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.16.1
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -lockfile=readonly -input=false
+      - run: terraform validate
+      - run: terraform test

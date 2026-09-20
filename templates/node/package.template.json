@@ -1,0 +1,1 @@
+{ "name": "template", "private": true, "type": "module", "scripts": { "dev": "tsx src/index.ts", "build": "tsc --noEmit", "typecheck": "tsc --noEmit" }, "devDependencies": { "tsx": "^4.20.0", "typescript": "~5.9.3", "@types/node": "^22.0.0" } }

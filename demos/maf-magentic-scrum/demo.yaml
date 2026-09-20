@@ -1,0 +1,25 @@
+id: maf-magentic-scrum
+title: MAF Magentic Scrum
+status: exploring
+summary: AI Scrum Teamのagent選択とtool callsをグラフで追い、review/test failure・stall・replanのtrajectoryを再生する。
+goal: Magentic managerのplanning・agent selection・replanningと、各specialistの仕事をグラフとstructured eventで追う。
+questions:
+  - Managerはどのagentをどのタイミングで選ぶか
+  - 不要なagent turnはどれくらい発生するか
+  - review/test failure時に正しくreplanできるか
+  - human approvalはどこに入れるべきか
+tags: [maf, multi-agent, magentic, orchestration]
+stack: [python, microsoft-agent-framework, typescript, react, material-ui, react-flow, vite]
+findings:
+  - credential不要のmock trajectoryでもfixtureの編集とunittestは実行される。
+  - review後のDeveloper再選択と、frameworkのREPLANNED eventは別の指標として扱う。
+  - Replayは記録されたeventの表示であり、agentやtoolを再実行しない。
+references:
+  - title: Microsoft Agent Framework Magentic orchestration
+    url: https://learn.microsoft.com/en-us/agent-framework/workflows/orchestrations/magentic
+  - title: Microsoft Agent Framework source and samples
+    url: https://github.com/microsoft/agent-framework
+app:
+  url: http://localhost:5175
+createdAt: 2026-09-20
+updatedAt: 2026-09-21

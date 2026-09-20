@@ -1,0 +1,4 @@
+agent-framework-core==1.19.0
+agent-framework-openai==1.14.4
+agent-framework-orchestrations==1.2.0
+python-dotenv>=1.0,<2

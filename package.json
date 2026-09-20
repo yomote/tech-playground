@@ -1,0 +1,38 @@
+{
+  "name": "tech-playground",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "pnpm metadata && pnpm --filter @playground/portal dev",
+    "build": "pnpm metadata && turbo run build",
+    "typecheck": "pnpm metadata && tsc --noEmit && turbo run typecheck",
+    "lint": "eslint . && pnpm metadata:validate",
+    "test": "tsx --test tests/*.test.ts",
+    "devops:check": "devops-agent run --base main --head HEAD",
+    "devops:report": "devops-agent show --json",
+    "metadata": "tsx tools/metadata.ts",
+    "metadata:validate": "tsx tools/metadata.ts --validate",
+    "demo:new": "tsx tools/create-demo/index.ts",
+    "demo:dev": "tsx tools/demo-dev.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@inquirer/prompts": "^7.8.0",
+    "@playground/demo-schema": "workspace:*",
+    "@types/node": "^22.0.0",
+    "devops-agent": "https://github.com/yomote/devops-agent/releases/download/v0.1.1/devops-agent-0.1.1.tgz",
+    "eslint": "^9.39.0",
+    "globals": "^16.0.0",
+    "tsx": "^4.20.0",
+    "turbo": "^2.5.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "yaml": "^2.8.0"
+  }
+}

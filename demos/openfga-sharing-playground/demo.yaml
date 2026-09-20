@@ -1,0 +1,27 @@
+id: openfga-sharing-playground
+title: OpenFGA Sharing Playground
+status: exploring
+summary: User・Team・Folder・Documentの関係グラフをつなぎ、切り、右側のcheckでpermission継承と認可経路を確かめる。
+goal: Google Drive風の共有関係を通して、単純なglobal RBACとresource単位のReBACの違いを理解する。
+questions:
+  - team membershipを消すとdocumentへの間接的なアクセスはどう変わるか
+  - folderのparentを変更するとpermissionはどう継承されるか
+  - 直接共有とgroup経由の共有が同時に存在したらどうなるか
+  - authorization decisionと教育用explanationはどのように区別すべきか
+tags: [authorization, rebac, zanzibar, sharing, openfga]
+stack: [typescript, openfga, docker, react, material-ui, react-flow, vite]
+findings:
+  - local mockと実OpenFGAは明示的に切り替える。接続失敗でmockに自動fallbackしない。
+  - authorization pathはdemoのtuple graphから計算する教育用表示で、OpenFGA serverの内部traceではない。
+  - 緑のnodeと線はcheckで見つかった1つの経路を示す。関係を編集したら再checkして権限の変化を観察する。
+references:
+  - title: OpenFGA parent-child modeling
+    url: https://openfga.dev/docs/modeling/parent-child
+  - title: OpenFGA authorization checks
+    url: https://openfga.dev/docs/getting-started/perform-check
+  - title: OpenFGA Docker setup
+    url: https://openfga.dev/docs/getting-started/setup-openfga/docker
+app:
+  url: http://localhost:5176
+createdAt: 2026-09-20
+updatedAt: 2026-09-21

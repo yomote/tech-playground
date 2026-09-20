@@ -1,0 +1,6 @@
+requireAllRequiredTests: true
+requireHumanApproval: false
+requireReview: true
+blockOn:
+  findingSeverity: [critical, error]
+  riskSeverity: [critical]
