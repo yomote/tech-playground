@@ -12,10 +12,38 @@ param location string = resourceGroup().location
 @minLength(1)
 param containerImage string
 
+@description('Single-tenant Entra tenant ID. Anonymous access is never enabled by this template.')
+@minLength(36)
+@maxLength(36)
+param tenantId string
+
+@description('Existing single-tenant Entra application client ID used for Portal sign-in.')
+@minLength(36)
+@maxLength(36)
+param clientId string
+
+@description('Explicit Entra user object IDs allowed to access the Portal; tenant membership alone does not grant access.')
+@minLength(1)
+param allowedUserObjectIds string[]
+
+@description('Existing user-assigned managed identity resource ID. It must already have Key Vault Secrets User access to the referenced secret.')
+@minLength(1)
+param authManagedIdentityResourceId string
+
+@description('Existing Key Vault secret HTTPS URI containing the Entra application client secret. Never pass a plaintext client secret.')
+@minLength(1)
+@secure()
+param authClientSecretKeyVaultUri string
+
+@description('Keep false for initial deployment. Publish only after the enabled auth configuration and explicit user allowlist have been verified on the existing app.')
+param publishIngress bool = false
+
 param tags object = {
   project: 'tech-playground'
   component: 'portal'
 }
+
+var authSecretName = 'microsoft-provider-authentication-secret'
 
 resource environment 'Microsoft.App/managedEnvironments@2026-01-01' = {
   name: '${namePrefix}-env'
@@ -39,17 +67,30 @@ resource portal 'Microsoft.App/containerApps@2026-01-01' = {
   name: '${namePrefix}-portal'
   location: location
   tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${authManagedIdentityResourceId}': {}
+    }
+  }
   properties: {
     environmentId: environment.id
     workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: {
-        external: true
+        external: publishIngress
         targetPort: 8080
         transport: 'http'
         allowInsecure: false
       }
+      secrets: [
+        {
+          name: authSecretName
+          keyVaultUrl: authClientSecretKeyVaultUri
+          identity: authManagedIdentityResourceId
+        }
+      ]
     }
     template: {
       containers: [
@@ -100,6 +141,55 @@ resource portal 'Microsoft.App/containerApps@2026-01-01' = {
   }
 }
 
-output portalUrl string = 'https://${portal.properties.configuration.ingress.fqdn}'
+resource portalAuth 'Microsoft.App/containerApps/authConfigs@2026-01-01' = {
+  parent: portal
+  name: 'current'
+  properties: {
+    platform: {
+      enabled: true
+    }
+    globalValidation: {
+      unauthenticatedClientAction: 'RedirectToLoginPage'
+      redirectToProvider: 'azureactivedirectory'
+      // Probes connect directly to the container; all external routes require sign-in.
+      excludedPaths: []
+    }
+    httpSettings: {
+      requireHttps: true
+      routes: {
+        apiPrefix: '/.auth'
+      }
+    }
+    identityProviders: {
+      azureActiveDirectory: {
+        enabled: true
+        registration: {
+          clientId: clientId
+          clientSecretSettingName: authSecretName
+          openIdIssuer: '${az.environment().authentication.loginEndpoint}${tenantId}/v2.0'
+        }
+        validation: {
+          defaultAuthorizationPolicy: {
+            allowedPrincipals: {
+              identities: allowedUserObjectIds
+            }
+          }
+        }
+      }
+    }
+    login: {
+      tokenStore: {
+        enabled: false
+      }
+    }
+  }
+}
+
+// Internal ingress adds `.internal.` to the current FQDN. Register the future
+// public callback before publishing, so the redirect URI does not change at launch.
+output portalUrl string = 'https://${portal.name}.${environment.properties.defaultDomain}'
+output currentIngressUrl string = 'https://${portal.properties.configuration.ingress.fqdn}'
 output containerAppName string = portal.name
 output environmentName string = environment.name
+output authConfigId string = portalAuth.id
+output externalIngressPublished bool = publishIngress

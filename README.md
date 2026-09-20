@@ -138,7 +138,7 @@ credentialやDockerがなくてもroot install/build/typecheck/lintとPortalは�
 
 ## Scope and limitations
 
-- 個人用local labです。user authentication、SaaS、共通DB、共通backend framework、大規模CI/CDは含みません。
+- 個人用local labです。ローカルDemoは独自のuser authenticationを持たず、Azureへ配備するPortalの入口だけを既存Entraで制限します。SaaS、共通DB、共通backend frameworkは含みません。
 - Portalは一覧と観察メモを探す入口です。Demo runtimeの統一や自動service orchestrationは行いません。
 - MCPのapplication stateとOpenFGAのmemory datastoreは再起動で失われます。
 - MAF mockは実Magenticの性能評価には使えません。liveはAPI利用環境が必要で、結果は非決定的です。
@@ -158,5 +158,5 @@ credentialやDockerがなくてもroot install/build/typecheck/lintとPortalは�
 
 - [DevOps AgentとCI](docs/devops.md): 実チェックの実行、証跡保存、reviewの扱い。
 - [GitHub設定IaC](infra/github/README.md): agent-worldと同じTerraform方式。既存repositoryをimportして管理。
-- [Azure配備準備](docs/azure-deployment.md): PortalだけをContainer Appsへ配備するBicepとcontainer。クラウドリソースは未作成。
+- [Azure配備準備](docs/azure-deployment.md): 既存Entraテナントの許可ユーザーだけが使えるPortalをContainer Appsへ配備するBicepとcontainer。初期は外部ingressを閉じ、認証確認後に公開。クラウドリソースは未作成。
 - [Agent作業指針](AGENTS.md): 実験の独立性を保ち、実際の課題からハーネス・スキル・MCPを育てる。

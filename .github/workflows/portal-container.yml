@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/portal-container.yml'
       - 'infra/azure/**'
+      - 'scripts/azure/**'
       - 'apps/portal/**'
       - 'packages/demo-schema/**'
       - 'packages/playground-ui/**'
@@ -20,6 +21,7 @@ on:
     paths:
       - '.github/workflows/portal-container.yml'
       - 'infra/azure/**'
+      - 'scripts/azure/**'
       - 'apps/portal/**'
       - 'packages/demo-schema/**'
       - 'packages/playground-ui/**'
@@ -36,6 +38,26 @@ permissions:
   contents: read
 
 jobs:
+  azure-config-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install pinned Bicep CLI
+        shell: bash
+        run: |
+          az bicep install --version v0.46.1
+          echo "$HOME/.azure/bin" >> "$GITHUB_PATH"
+      - name: Compile authentication foundation
+        run: bicep build infra/azure/auth-foundation.bicep --stdout > /dev/null
+      - name: Verify Portal authentication boundary
+        run: python3 infra/azure/test_auth_template.py
+      - name: Verify Entra preflight guard with local fixtures
+        shell: pwsh
+        run: ./scripts/azure/tests/Test-EntraAccess.Tests.ps1
+
   container-check:
     runs-on: ubuntu-latest
     timeout-minutes: 20

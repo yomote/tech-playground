@@ -18,3 +18,4 @@ demos/maf-magentic-scrum/runs/
 *.tfvars.json
 !*.tfvars.example
 !*.tfvars.json.example
+infra/azure/*.local.parameters.json
