@@ -67,6 +67,8 @@ pnpm demo:dev decision-workbench
 
 `setup_models.py`は両モデルを明示的に取得します。`--model modernbert`または`--model gliclass`で片方だけも取得できます。cacheはこのDemoの`.cache/huggingface/`で、gitへ含めません。
 
+固定snapshotの合計は約1.45 GiBです。今回のWindows環境ではsymlinkを使えずcacheに重複が生じ、`.cache/huggingface/`全体は約2.18 GiBでした。`.venv`の容量は別に必要です。
+
 UI: http://localhost:5177 （接続できなければ http://127.0.0.1:5177）。初回読み込みとwarmな推論は所要時間が異なります。メモリを抑えるため、モデル切り替え時は前のweightsを解放します。CPU、候補数、文章の長さにも左右されるため、異なる条件の時間をそのまま性能比較にしないでください。
 
 モデルを導入せずに契約とfixtureを検証できます:
@@ -87,7 +89,17 @@ python -m unittest -v test_contract
 
 ## Findings
 
-現時点で共有の精度・速度benchmarkは掲載していません。fixtureの期待値は実験の仮説であり、両モデルがその回答を返したという結果ではありません。
+2026-09-21、Windows / Python 3.11.9 / PyTorch 2.10.0+cpu / CPU 4 threadsで、上記固定revisionの両モデルを実行しました。Transformers 5.17.0、GLiClass 0.1.20を使用しています。以下は3件の動作確認であり、精度・速度benchmarkではありません。数値は選ばれた候補のscoreです。
+
+| fixture | 参考回答 | ModernBERT | GLiClass |
+| --- | --- | --- | --- |
+| 鶏がらスープ・日本語 | 違反する | 満たす / 0.422（誤り） | 満たす / 0.941（誤り） |
+| 鶏がらスープ・英語 | 違反する | 満たす / 0.442（誤り） | 情報不足 / 0.554（誤り） |
+| 条件を明記したCSV依頼・日本語 | 情報が揃う | 情報が揃う / 0.875 | 情報が揃う / 0.99946 |
+
+GLiClassは日本語の鶏がらスープを0.941で誤判定しました。**高い候補scoreは、正しい判断の確率ではありません。** この結果だけから、言語やモデル全体の優劣を結論づけません。
+
+この3件の推論時間はModernBERT約1.82〜6.43秒、GLiClass約1.30〜2.28秒でした。初回読み込みはそれぞれ約35.3秒、27.1秒で、Pythonのライブラリimportを含みます。端末の負荷、cache、入力長、実行順に依存する観測値です。全12fixtureをGLiClass tokenizerで確認し、最長の日本語CSV条件付き依頼は335 tokensで、Demoの512-token上限内でした。
 
 6組だけで日本語性能、一般知識、推論能力全体を評価することはできません。追加実験では、否定表現、紛らわしい選択肢、明示された例外、文中の相反する情報、選択肢の順序を変えた場合も確認します。
 

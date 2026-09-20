@@ -1,6 +1,6 @@
 # Decision Workbench — 第4 Demoの設計と初版
 
-**状態: 初版を`demos/decision-workbench/`へ実装済み。実モデルの推論動作とfixture比較は確認中です。この文書には未確認の精度・速度結果を掲載しません。**
+**状態: 初版を`demos/decision-workbench/`へ実装済み。2026-09-21に固定revisionの両モデルで3件ずつCPU推論を確認しました。誤判定を含む実結果と実行条件は[Demo READMEのFindings](../demos/decision-workbench/README.md#findings)に記録しています。これはbenchmarkではありません。**
 
 この文書は提案時の狙いと、初版で採用した範囲を残します。起動方法と固定モデルrevisionは[Demo README](../demos/decision-workbench/README.md)を参照してください。
 
@@ -73,6 +73,6 @@
 
 初回は公開モデルと依存packageのダウンロードが必要です。`setup_models.py`で固定revisionのweightsを明示的に取得し、推論adapterはローカルcacheを使用します。モデル未取得時はsetup案内を表示し、Playground全体のbuildは継続できます。API keyは不要で、mock値へのfallbackは実装していません。コードの完成と実モデルによる動作確認は区別し、確認結果はDemo側へ記録します。
 
-初版の範囲は、3つのモード、2モデルの切り替え、編集可能な基準、日英fixture、差分比較、結果のJSON保存までです。最大12入力を順次実行し、入力長は各モデルのDemo上限を超えればエラーにします。fine-tuning、複雑なworkflow、自動実行agentは後の実験とします。CPUでの待ち時間や必要メモリ、fixtureに対する実結果は、実行条件とともに確認して残します。
+初版の範囲は、3つのモード、2モデルの切り替え、編集可能な基準、日英fixture、差分比較、結果のJSON保存までです。最大12入力を順次実行し、入力長は各モデルのDemo上限を超えればエラーにします。fine-tuning、複雑なworkflow、自動実行agentは後の実験とします。最初のCPU確認では、日本語の鶏がらスープを両モデルが誤判定し、GLiClassの候補scoreは0.941でした。この観察からもscoreを正しさと同一視せず、判断基準や表現を変えた結果を残して比較します。
 
 参考: [GLiClass公式依存定義](https://github.com/Knowledgator/GLiClass/blob/main/pyproject.toml)・[ModernBERT-Instruct公式cookbook](https://github.com/AnswerDotAI/ModernBERT-Instruct-mini-cookbook)

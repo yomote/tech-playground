@@ -12,7 +12,8 @@ questions:
   - モデル固有のscoreと実際の正しさを混同せず比較できるか
 tags: [zero-shot, text-classification, decision, masked-language-model, multilingual, local-inference]
 stack: [python, pytorch, transformers, modernbert, gliclass, react, material-ui, vite]
-findings: []
+findings:
+  - 2026-09-21のCPU動作確認では、日本語の鶏がらスープを両モデルが誤判定し、GLiClassは候補score 0.941だった。高いscoreは正解確率ではない。
 references:
   - title: ModernBERT official repository
     url: https://github.com/AnswerDotAI/ModernBERT
