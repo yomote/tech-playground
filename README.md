@@ -25,7 +25,7 @@ pnpm demo:dev decision-workbench
 | [MCP Apps Playground](demos/mcp-apps-playground/README.md) | http://localhost:5174 | Real MCP / Apps bridge + mock experiment results | External MCP Apps host |
 | [MAF Magentic Scrum](demos/maf-magentic-scrum/README.md) | http://localhost:5175 | Scripted mock agents + actual Python fixture tests | Python SDK + OpenAI API key for live Magentic |
 | [OpenFGA Sharing Playground](demos/openfga-sharing-playground/README.md) | http://localhost:5176 | Local mock authorization evaluator | Docker OpenFGA for live checks |
-| [Decision Workbench](demos/decision-workbench/README.md) | http://localhost:5177 | Real local ModernBERT / GLiClass inference after setup | Dedicated Python venv + public model downloads; no API credential |
+| [Decision Workbench](demos/decision-workbench/README.md) | http://localhost:5177 | System One Adapter / configured LLM, with local ModernBERT / GLiClass comparison | Dedicated Python venv; adapter needs LLM API configuration, local models need public downloads |
 
 各DemoのOpen Demoリンクは起動を代行しません。先に対応commandを実行してください。各serverはloopbackでlistenします。初期データとmock/liveの区別はUIにも表示します。
 
@@ -41,7 +41,7 @@ tech-playground/
 │  ├─ mcp-apps-playground/         MCP server / UI resource / local host
 │  ├─ maf-magentic-scrum/          Python orchestrator / fixture / trajectory UI
 │  ├─ openfga-sharing-playground/  Model / server / sharing UI / Docker compose
-│  └─ decision-workbench/         Local classifiers / editable criteria / paired fixtures
+│  └─ decision-workbench/         LLM adapter / local classifiers / paired fixtures
 ├─ packages/
 │  ├─ demo-schema/                Shared Zod Demo / DemoStatus + search
 │  └─ playground-ui/              Optional Material UI theme and presentation components
@@ -104,7 +104,7 @@ source of truthは`demos/*/demo.yaml`。`packages/demo-schema`のZod schemaをCL
 | MCP Apps | 「プロンプト比較」と「構造化データ抽出」でそれぞれtoolを呼ぶ | 同じUI resourceが、tool resultのフォーム定義に応じて異なる入力欄を表示する。UI操作がさらにtoolを呼ぶ。 |
 | Magentic Scrum | Mockのtest failureを実行し、Replayする | Managerのagent選択、fixtureへのtool calls、replanまでの経路がeventごとに変わる。 |
 | OpenFGA Sharing | Bobの編集権限をCheckし、Bob → Team Xの線を削除して再Checkする | 間接的な認可経路が緑で表示され、関係を切ると権限が変わる。 |
-| Decision Workbench | 日英の問題を選び、基準や情報を編集して2モデルで判定する | 知識を必要とする判断・情報不足・誤判定と、候補scoreと正誤の違いを観察する。 |
+| Decision Workbench | 日英の問題を選び、基準や情報を編集してLLMとローカル分類モデルを比較する | 知識を必要とする判断・情報不足・誤判定と、候補scoreと正誤の違いを観察する。 |
 
 MCP AppsはHTMLをtool resultに直接埋め込む仕組みではありません。このDemoではtool定義がUI resourceを参照し、hostがそのHTMLを取得して、別途返された`structuredContent`をUIへ渡します。フォーム定義のJSON形式はこのDemo独自です。
 
@@ -126,7 +126,7 @@ cd demos/maf-magentic-scrum
 python -m unittest -v test_runner
 # Decision Workbench directoryでは、モデル取得なしでAPI/fixtureを検証:
 cd ../decision-workbench
-python -m unittest -v test_contract
+python -m unittest -v test_contract test_adapter test_codex_provider
 ```
 
 任意のintegration checks（Demo server起動後）:
@@ -143,7 +143,7 @@ OpenFGAの実server検証には、Dockerのない環境で公式Windows binary *
 
 credentialやDockerがなくてもroot install/build/typecheck/lintとPortalは利用可能です。Python依存はpnpm installから導入しません。MAF mockは標準ライブラリだけ、live dependenciesはそのDemoのrequirements.txtから任意で導入します。
 
-Decision Workbenchは専用venvと公開モデルの初回ダウンロードが必要です。[Demoのセットアップ手順](demos/decision-workbench/README.md#run)を実行してください。未セットアップでも画面は開けますが、架空の判定結果へフォールバックせず準備状況を表示します。
+Decision Workbenchは専用venvで、System One Adapter用のLLM API設定、またはローカルモデルのダウンロードを行います。[Demoのセットアップ手順](demos/decision-workbench/README.md#run)を参照してください。AdapterはJevと同じ形式で通常のLLMを呼ぶもので、Jev本体ではありません。未設定でも画面は開け、架空の判定結果へフォールバックせず準備状況を表示します。
 
 ## Scope and limitations
 

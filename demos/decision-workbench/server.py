@@ -11,7 +11,7 @@ import threading
 import uuid
 
 ROOT = Path(__file__).resolve().parent
-MODEL_IDS = ('modernbert', 'gliclass')
+MODEL_IDS = ('modernbert', 'gliclass', 'llm-adapter')
 MODES = ('classification', 'criteria', 'sufficiency')
 TASK_FIELDS = ('mode', 'language', 'text', 'question', 'criteria', 'options')
 runs: dict[str, dict] = {}
@@ -74,8 +74,8 @@ def validate_request(data) -> dict:
     models = data.get('models')
     if not isinstance(inputs, list) or not 1 <= len(inputs) <= 12:
         raise ValueError('Provide 1 to 12 inputs')
-    if not isinstance(models, list) or not 1 <= len(models) <= 2 or any(not isinstance(model, str) or model not in MODEL_IDS for model in models):
-        raise ValueError('Select modernbert and/or gliclass')
+    if not isinstance(models, list) or not 1 <= len(models) <= len(MODEL_IDS) or any(not isinstance(model, str) or model not in MODEL_IDS for model in models):
+        raise ValueError('Select modernbert, gliclass and/or llm-adapter')
     if len(set(models)) != len(models):
         raise ValueError('Do not repeat a model')
     return {'inputs': [validate_task(task) for task in inputs], 'models': list(models)}
@@ -166,5 +166,5 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     if not (ROOT / 'dist/index.html').exists():
         raise SystemExit('Build the UI first: pnpm --filter @playground/decision-workbench build')
-    print('Decision Workbench: http://127.0.0.1:5177 (local models; no mock inference)', flush=True)
+    print('Decision Workbench: http://127.0.0.1:5177 (real local models / configured LLM API)', flush=True)
     ThreadingHTTPServer(('127.0.0.1', 5177), Handler).serve_forever()

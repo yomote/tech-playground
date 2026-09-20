@@ -1,0 +1,7 @@
+# Optional LLM-backed comparison. Codex uses the separately installed CLI and saved login.
+# Does not install or update local-model dependencies.
+system-one-adapter[openai,anthropic]==0.2.0
+typesafe-sdk==0.7.0
+openai==3.16.2
+anthropic==1.7.0
+python-dotenv==1.2.3

@@ -2,9 +2,11 @@
 
 **状態: 初版を`demos/decision-workbench/`へ実装済み。2026-09-21に固定revisionの両モデルで3件ずつCPU推論を確認しました。誤判定を含む実結果と実行条件は[Demo READMEのFindings](../demos/decision-workbench/README.md#findings)に記録しています。これはbenchmarkではありません。**
 
+追加の比較対象として、TypeSafe公式System One Adapterから既存Codex環境またはLLM APIへ接続する`llm-adapter`の経路を用意しました。Codex CLI 0.154.0-alpha.6.2 / `gpt-6-astra`経由で、日本語の鶏がらスープfixtureが参考回答の「違反する」と一致する実推論を確認しました。OpenAI互換/Anthropic API providerの実接続は未検証です。上記のCPU観測値はModernBERT/GLiClassだけの結果で、Codex側の観測はDemo READMEに分けて記録しています。
+
 この文書は提案時の狙いと、初版で採用した範囲を残します。起動方法と固定モデルrevisionは[Demo README](../demos/decision-workbench/README.md)を参照してください。
 
-目的は、事前学習済み言語モデルを「文章を生成するもの」ではなく、質問と基準に応じて答えを選ぶ汎用の判定器として使い、どこまで判断できるかを触って理解することです。Jevへのアクセスを前提とせず、公開モデルをローカルで比較します。モデルルーティングは応用例の一つに留めます。
+目的は、事前学習済み言語モデルを、質問と基準に応じて答えを選ぶ汎用の判定器として使い、どこまで判断できるかを触って理解することです。Jevへのアクセスを前提とせず、公開モデルのローカル推論と任意のLLM APIを比較します。モデルルーティングは応用例の一つに留めます。
 
 ## 試す3つのモード
 
@@ -24,17 +26,28 @@
 | --- | --- | --- |
 | `answerdotai/ModernBERT-Large-Instruct` | 自然文の質問と選択肢を渡す判定器 | 約0.4Bのinstruction-tuned encoder。公式例ではMLM headを使い、`ANSWER: [unused0] [MASK]`の位置からA〜Dの回答を得る。CPU実行例あり、Apache-2.0 |
 | `knowledgator/gliclass-instruct-base-v1.0` | 同じ入力・基準を別方式で判定する比較対象 | 約187M。任意label、task prompt、自然文のlabel説明を使うzero-shot分類。追加学習なしで試せる。CPU対応、Apache-2.0 |
+| `llm-adapter` / 設定したLLM | 公式System One AdapterのChoice APIを使う比較対象 | 使用API/modelに依存。Jevモデルのweights、速度、校正を再現するものではなく、型付き評価APIの互換経路。Codex経由を実確認、OpenAI互換/Anthropic API接続は未検証 |
 
 通常のModernBERTの基礎モデルに、そのまま汎用の判定機能が備わっていると扱わないようにします。ここでは用途に合わせてinstruction tuningされたモデルを使います。[ModernBERT-Large-Instruct公式モデルカード](https://huggingface.co/answerdotai/ModernBERT-Large-Instruct)
 
 実装したGLiClass adapterでは、各候補の**labelとdescriptionを連結した自然文**を`labels`へ渡し、質問と判断基準を`prompt`へ渡します。候補のidは結果とUIの対応付けに使用します。入力文も含め、それぞれのモデルに合わせて組み立てた実際のpromptを結果で確認できます。人が書いた期待値と根拠は推論promptへ含めません。[GLiClass-Instructモデルカード](https://huggingface.co/knowledgator/gliclass-instruct-base-v1.0)・[公式使用ガイド](https://docs.knowledgator.com/docs/frameworks/gliclass/usage/)
 
-将来の比較対象として、NLI向けに調整された[ModernBERT-base-zeroshot-v2.0](https://huggingface.co/MoritzLaurer/ModernBERT-base-zeroshot-v2.0)も候補です。初版のモデル数は上記2つに絞ります。
+将来の比較対象として、NLI向けに調整された[ModernBERT-base-zeroshot-v2.0](https://huggingface.co/MoritzLaurer/ModernBERT-base-zeroshot-v2.0)も候補です。現在の実行対象はローカル2モデルと任意のLLM adapterの3つです。
+
+## 公式System One Adapterを使う理由
+
+ユーザーがすでに利用できるLLM APIで、TypeSafeの型付きChoice評価の使い方を試すためです。[TypeSafe公式System One Adapter](https://github.com/typesafe-ai/system-one-adapter-python)を使用し、独自に似た名前のAPIを作ってJevと同一と扱うことを避けます。
+
+本文を`state`、問いと判断基準を`instructions`、候補idからlabel・descriptionへの対応をChoiceの`criteria`へ渡します。fixtureの期待値・人の根拠は入力へ含めません。返答の選択肢idと分布を検証し、未知id、非有限値、未実行やprovider errorを成功に変換しません。
+
+`DEMO_LLM_PROVIDER`は`codex`、`openai`、`anthropic`から選び、`DEMO_LLM_MODEL`でモデルを指定します。CodexはこのDemoのcustom providerから既存CLIとそのログインを使用し、API keyを追加する必要はありません。ChatGPTログインでは既存のCodex利用枠を消費します。認証ファイルをrepositoryやcloud/CIへコピーしません。Codex provider自体をTypeSafe公式実装と称するものではありません。
+
+OpenAI互換/Anthropic APIではDemo専用`.env`に必要な`DEMO_LLM_API_KEY`を設定し、OpenAI互換endpointには任意の`DEMO_LLM_BASE_URL`を使います。依存は任意の`requirements-adapter.txt`へ分け、未設定でもrepositoryのbuildやローカルモデルは利用できます。keyはPython側だけが読み、ブラウザ・git・ログへ渡しません。実行時は入力を設定先へ送り、クラウドAPIでは契約に応じて利用料金が発生し得ます。
 
 ## 実装した画面と操作
 
 - 左: 入力文、質問、判断基準、2〜4個の選択肢と各説明を編集。日英プリセットから始め、自由に変更できる。
-- 中央: モデルごとの選択結果と候補scoreを並べる。モデル単体または両方で実行する。
+- 中央: 実行対象ごとの選択結果と候補scoreを並べる。単体または複数を選んで実行する。
 - 右: 前回の入力・基準との差分、結果の変化、実測した推論時間を表示する。
 - 下: fixtureの期待結果との一致、誤判定、情報不足の判定漏れを確認する。
 
@@ -61,18 +74,18 @@
 
 ## scoreの扱いとJevとの違い
 
-初版は候補のlogitをsoftmaxで正規化したscoreと、元の`rawScore`を返します。ModernBERTの回答token scoreとGLiClassの分類scoreを、同じ意味のconfidenceとして直接比較しません。候補間で正規化した値も、その答えが現実に正しい確率を保証するものではありません。
+ローカル2モデルは候補のlogitをsoftmaxで正規化したscoreと、元の`rawScore`を返します。LLM adapterは生成LLMが回答した候補分布を返し、logitを捏造しません。ModernBERTの回答token score、GLiClassの分類score、LLMの回答分布を、同じ意味のconfidenceとして直接比較しません。いずれも、その答えが現実に正しい確率を保証するものではありません。
 
 情報不足は明示的な選択肢として判定させます。低いscoreだけを情報不足と同一視せず、scoreが高い誤答もfixtureで観察します。ModernBERTで想定した回答token以外が出た場合も、成功した判定へ黙って変換しません。
 
-これらはJevのChoice・Noul・Scoreと同一のAPIや校正方法を再現するものではありません。初版は選択式の判定に集中し、rubricの段階を連続値へ集約する機能は後の実験にします。公開encoderがJevや大規模生成LLMと同等の知識・推論能力を持つとは仮定しません。
+ローカルencoderの経路は独自の比較用APIです。追加した公式adapterの経路ではSystem Oneの型付きChoice APIを使いますが、Jev/System Oneモデル本体の知識・速度・校正を再現しません。LLMが出した分布を「Jevの校正済みconfidence」と表示しません。初版は選択式の判定に集中し、Noul/Scoreやrubricの段階を連続値へ集約する機能は後の実験とします。
 
 ## 初版の実行範囲
 
 `demos/decision-workbench/`にReact + Material UI、ローカルPython HTTP API、推論adapter、fixtureと契約テストをまとめました。Demo専用venvとモデルcacheを使い、他のDemoやPortalのruntimeへPython・推論モデルの依存を持ち込みません。
 
-初回は公開モデルと依存packageのダウンロードが必要です。`setup_models.py`で固定revisionのweightsを明示的に取得し、推論adapterはローカルcacheを使用します。モデル未取得時はsetup案内を表示し、Playground全体のbuildは継続できます。API keyは不要で、mock値へのfallbackは実装していません。コードの完成と実モデルによる動作確認は区別し、確認結果はDemo側へ記録します。
+ローカルモデルは初回に公開weightsと依存packageのダウンロードが必要です。`setup_models.py`で固定revisionを明示的に取得し、推論時はローカルcacheを使用します。ローカル推論のAPI keyは不要です。LLM adapterは設定したAPIの認証・実行環境を使用します。未取得・未設定時はsetup案内を表示し、Playground全体のbuildは継続できます。mock値へのfallbackは実装していません。コードの完成と実推論の動作確認は区別し、確認結果はDemo側へ記録します。
 
-初版の範囲は、3つのモード、2モデルの切り替え、編集可能な基準、日英fixture、差分比較、結果のJSON保存までです。最大12入力を順次実行し、入力長は各モデルのDemo上限を超えればエラーにします。fine-tuning、複雑なworkflow、自動実行agentは後の実験とします。最初のCPU確認では、日本語の鶏がらスープを両モデルが誤判定し、GLiClassの候補scoreは0.941でした。この観察からもscoreを正しさと同一視せず、判断基準や表現を変えた結果を残して比較します。
+現在の範囲は、3つのモード、ローカル2モデルと任意LLM adapter、編集可能な基準、日英fixture、差分比較、結果のJSON保存までです。最大12入力を順次実行し、入力長は各モデルのDemo上限を超えればエラーにします。fine-tuning、複雑なworkflow、自動実行agentは後の実験とします。最初のCPU確認では、日本語の鶏がらスープを両ローカルモデルが誤判定し、GLiClassの候補scoreは0.941でした。この観察をLLM adapterへそのまま転用せず、同じ課題を実行して比較します。
 
 参考: [GLiClass公式依存定義](https://github.com/Knowledgator/GLiClass/blob/main/pyproject.toml)・[ModernBERT-Instruct公式cookbook](https://github.com/AnswerDotAI/ModernBERT-Instruct-mini-cookbook)

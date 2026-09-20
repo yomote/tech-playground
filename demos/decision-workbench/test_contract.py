@@ -69,8 +69,11 @@ class RequestValidationTests(unittest.TestCase):
         result = validate_request({'inputs': [self.task], 'models': ['modernbert']})
         self.assertEqual(len(result['inputs']), 1)
         self.assertEqual(result['models'], ['modernbert'])
-        full = validate_request({'inputs': fixtures(), 'models': ['modernbert', 'gliclass']})
+        full = validate_request({'inputs': fixtures(), 'models': ['modernbert', 'gliclass', 'llm-adapter']})
         self.assertEqual(len(full['inputs']), 12)
+        self.assertEqual(full['models'], ['modernbert', 'gliclass', 'llm-adapter'])
+        adapter_only = validate_request({'inputs': [self.task], 'models': ['llm-adapter']})
+        self.assertEqual(adapter_only['models'], ['llm-adapter'])
         result['inputs'][0]['options'][0]['label'] = 'external mutation'
         self.assertNotEqual(self.task['options'][0]['label'], 'external mutation')
 
@@ -81,6 +84,8 @@ class RequestValidationTests(unittest.TestCase):
             {'inputs': [self.task], 'models': []},
             {'inputs': [self.task], 'models': ['unknown']},
             {'inputs': [self.task], 'models': ['modernbert', 'modernbert']},
+            {'inputs': [self.task], 'models': ['llm-adapter', 'llm-adapter']},
+            {'inputs': [self.task], 'models': ['modernbert', 'gliclass', 'llm-adapter', 'other']},
             {'inputs': [self.task], 'models': 'modernbert'},
             {'inputs': [self.task], 'models': [None]},
         ):

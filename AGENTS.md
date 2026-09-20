@@ -6,7 +6,7 @@
 - `demos/*/demo.yaml` is the metadata source of truth; reuse `packages/demo-schema` in tools and Portal.
 - Portal is React + Vite and must not import filesystem APIs. Keep it small and usable without demo credentials.
 - Existing React demos use the optional `@playground/ui` theme: navy primary, light gray surfaces, compact controls. Check text contrast in real rendered screens.
-- Decision Workbench uses real optional local models. Never replace unavailable inference with fabricated predictions; keep candidate scores separate from correctness, and clear fixture expectations when their input or criteria changes.
+- Decision Workbench uses optional local models and an explicitly configured LLM through System One Adapter. The adapter is not Jev itself. Never replace unavailable inference with fabricated predictions; distinguish model logits from LLM-reported probabilities, keep scores separate from correctness, and clear fixture expectations when inputs change. Keep provider keys server-side and out of responses and run logs.
 - Preserve clear mock/live labels. Never present mock agent decisions, scores, or authorization checks as real service evidence.
 
 ## Changes and evidence

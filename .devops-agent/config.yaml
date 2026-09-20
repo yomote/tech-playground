@@ -64,7 +64,7 @@ testing:
       always: true
     - id: decision-workbench-contract
       type: regression
-      command: python -m unittest -v test_contract
+      command: python -m unittest -v test_contract test_adapter test_codex_provider
       cwd: demos/decision-workbench
       description: Decision input validation, fixture answers, and edited-input expectations without model downloads
       required: true

@@ -35,6 +35,13 @@ group membership and folder inheritance. The explanation graph is local model
 traversal, not a server-native decision trace. tests/integration.ts currently
 couples OpenFGA and MAF HTTP checks; split it before registering independent jobs.
 
+Decision Workbench adapter changes need test_contract, test_adapter, and test_codex_provider without
+credentials. Use the official System One Adapter API and keep provider identity
+visible. Its LLM-generated probabilities are not calibrated Jev probabilities.
+Fixture expectations and human rationales must never enter model requests. Keep
+keys and raw provider errors out of client responses and persisted runs. A fake
+provider used in a contract test does not establish live LLM inference or accuracy.
+
 Mock review and planning do not perform semantic analysis. Report this limitation
 explicitly. The readiness CI job gates automated evidence only. Never treat its
 green status as release approval or silently dismiss a non-mock warning/blocker.
