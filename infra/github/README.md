@@ -1,14 +1,14 @@
 # GitHub settings as code
 
-このディレクトリをGitHub設定の正本にします。[agent-worldのTerraform構成](https://github.com/yomote/agent-world/tree/main/infra/github)を基に、個人用のprivate repository向けに管理範囲を絞っています。
+このディレクトリをGitHub設定の正本にします。[agent-worldのTerraform構成](https://github.com/yomote/agent-world/tree/main/infra/github)を基に、個人用repository向けに管理範囲を絞っています。
 
-対象は既存の **`yomote/tech-playground` / private / main**。このコードの追加やCIの成功だけでは、GitHub設定を適用したことにはなりません。Azure resourceは管理しません。
+対象は既存の **`yomote/tech-playground` / public / main**。所有者の指示によりpublicで管理します。このコードの追加やCIの成功だけでは、GitHub設定を適用したことにはなりません。Azure resourceは管理しません。
 
 ## Managed settings
 
 既定でrepositoryの公開範囲、Issues、squash-only merge、merge後のbranch削除、mainを管理します。ActionsはGitHub製と明示したActionのみを許可し、既定tokenをread-onlyにしてPR自己承認を禁止します。Dependabot vulnerability alerts/security updatesも管理します。repositoryには`prevent_destroy`を設定しています。
 
-次の機能はprivate repositoryのGitHubプランに依存するため、**既定は無効**です。
+次の機能は別途有効化する方針のため、**既定は無効**です。private repositoryへ適用する場合はGitHubプランによる利用可否も確認してください。
 
 | Input | 有効化した場合 |
 | --- | --- |
@@ -40,7 +40,7 @@ terraform -chdir=infra/github providers lock -platform=windows_amd64 -platform=l
 
 ## First plan and apply
 
-1. repositoryとmainがすでに存在すること、現在のvisibilityがprivateであることを`gh repo view yomote/tech-playground`で確認します。`imports.tf`は既存repo/settingsをimportするため、repo名が間違っていればplanを失敗させ、新規repoを作りません。
+1. repositoryとmainがすでに存在すること、現在のvisibilityが意図したpublicであることを`gh repo view yomote/tech-playground`で確認します。`imports.tf`は既存repo/settingsをimportするため、repo名が間違っていればplanを失敗させ、新規repoを作りません。
 2. `terraform.tfvars.example`を`terraform.tfvars`へコピーします。既存の`gh`管理権限ログイン、またはprocess内の`GITHUB_TOKEN`を使います。tokenはtfvars・stateの任意属性・CI artifactへ書かないでください。
 3. optional featureを有効にする場合は、GitHubプラン対応、既存のruleset/classic protection、environmentをAPIで確認します。`readiness`が実際に成功し、check-runの`app.id`が`15368`であることを確認してからrulesetを有効化します。
 4. 既存の`tech-playground-main` rulesetは`existing_ruleset_id`へIDを入れます。既存environmentは`import_azure_environment=true`にします。environmentに既存のmain deployment policyがある場合は、次のimportで取り込み、重複作成を防いでください（`POLICY_ID`を実際のIDに置換）。

@@ -28,7 +28,7 @@ variable "visibility" {
 variable "enable_main_ruleset" {
   type        = bool
   default     = false
-  description = "Enable only after confirming ruleset support for this private repository and a successful readiness check."
+  description = "Enable only after confirming repository ruleset support and a successful readiness check."
 }
 
 variable "existing_ruleset_id" {
@@ -45,7 +45,7 @@ variable "existing_ruleset_id" {
 variable "enable_azure_environment" {
   type        = bool
   default     = false
-  description = "Enable azure-production only after confirming environment and branch-policy support for this private repository."
+  description = "Enable azure-production only after confirming repository environment and branch-policy support."
 }
 
 variable "import_azure_environment" {
