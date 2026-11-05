@@ -7,7 +7,8 @@ import { formFor, type Experiment } from './contract';
 export const resourceUri = 'ui://experiments/dashboard.html';
 export const store = new ExperimentStore();
 export function createServer() {
-  const server = new McpServer({ name: 'experiment-dashboard', version: '0.1.0' });
+  // update_experiment accepts up to 13 object members including experimentId.
+  const server = new McpServer({ name: 'experiment-dashboard', version: '0.1.0' }, { maxToolInputElements: 16 });
   const result = (operation: () => Experiment) => {
     try { const experiment = operation(); const data = { experiment, form: formFor(experiment.kind) }; return { content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data }; }
     catch (error) { return { isError: true, content: [{ type: 'text' as const, text: String(error) }] }; }
