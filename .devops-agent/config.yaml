@@ -69,3 +69,38 @@ testing:
       description: Decision and triage validation, provider boundaries, batch/sequential execution and fixture references without model downloads
       required: true
       always: true
+    - id: order-exception-parent-contract
+      type: regression
+      command: python -m unittest -v test_order_agent test_server
+      cwd: demos/order-exception-saas
+      description: Fixed-option parent API, saved-state, version and approval boundaries
+      required: true
+      always: true
+    - id: order-exception-trial-contract
+      type: regression
+      command: python -m unittest -v test_final_reply
+      cwd: demos/order-exception-saas/trial/backend
+      description: Isolated trial model reply storage and stale-source boundary using test doubles
+      required: true
+      always: true
+    - id: order-exception-owner-entry-contract
+      type: regression
+      command: python -m unittest -v test_owner_entry
+      cwd: demos/order-exception-saas/trial
+      description: Owner-only entry denies missing identity and unauthorized routes using a fake backend
+      required: true
+      always: true
+    - id: order-exception-trial-ui-typecheck
+      type: custom
+      command: pnpm typecheck
+      cwd: demos/order-exception-saas/trial/ui
+      description: Typecheck isolated trial UI after its pinned npm install
+      required: true
+      always: true
+    - id: order-exception-trial-ui-build
+      type: custom
+      command: pnpm build
+      cwd: demos/order-exception-saas/trial/ui
+      description: Build isolated trial UI after its pinned npm install
+      required: true
+      always: true

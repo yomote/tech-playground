@@ -1,0 +1,314 @@
+{
+  "date": "2026-11-09",
+  "owner": "root",
+  "scope": "OE-02 local synthetic trial; no new deployment or formal release acceptance",
+  "checkout": {
+    "baseRevision": "dc6b3f12b93b45b3e24a926f8570ca3e37540a39",
+    "construction": "tracked HEAD checkout plus 21 explicitly copied, untracked source files; not a Git-only reproducible checkout",
+    "sourceFiles": [
+      {
+        "path": "apps/webhost/tailnet_access.py",
+        "sha256": "702723823a89aa7185288d83acab42a0fc30cf9556bf9a507dde3eef1b503c14"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/README.md",
+        "sha256": "ed76338b239bb89093daacccf09224f241407bc7c3d9f86222c65ec5fee66b2d"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/backend/draft_gate.py",
+        "sha256": "1463b7749fa9b9aeb61420d52fe02181859941f1e897cd2504145e0a8cbca55c"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/backend/identity_registry.py",
+        "sha256": "9ca994befa7ae50f9e14bba980dc41991d5f7f926b5e7f7cba66ee8760924d31"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/backend/inventory_auth.py",
+        "sha256": "a059c178ee1c434802592a648d2a3a04ea4ddfe9100e2397ca155771685297a0"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/backend/order_agent.py",
+        "sha256": "7ea3e3e46ae790e8783f99a15c352cab4c3e529d111c09f0c4a37808b7545f67"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/backend/server.py",
+        "sha256": "302343d58cc973c4ff6b139b3b838fcfa41a112259efd909d05521284a6a7185"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/backend/single_agent.py",
+        "sha256": "b780852a406309852f0aeccef102b62e5ed318130068fe4dc3e28874c9583266"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/backend/source_fixtures.py",
+        "sha256": "65424491d8237c253bca0ef375ebed9d35d322972fd96a24a7c33e09bb5490c9"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/backend/test_final_reply.py",
+        "sha256": "cc10dda066d1fe135e80072cee6d840dc4a28563a2f89835aee4a9e380641318"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/owner_entry.py",
+        "sha256": "390709aea856c9000a331a0663180307c9c63f60740604320ca3e2497c8c3139"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/requirements.txt",
+        "sha256": "1f003117ef5ae8249c55a2cb83df66d5e6bc4e9cda65ea0a1fe1dd076904b553"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/ui/index.html",
+        "sha256": "21fcaec04544c95b245f8f5a6421fedfbc426669eae562c717c611d29df2317d"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/ui/package-lock.json",
+        "sha256": "668f619b686b71fc68e6b205940c8f87eee0be1ed807bc316665b4dcf8afa666"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/ui/package.json",
+        "sha256": "9718ac8d2e0be11f754f186a08c3faac384e90814366ecfaf4be45170a9e3818"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/ui/src/InventoryAuthPanel.tsx",
+        "sha256": "1076aa02b7480113a1343d9f773ed71e3e7fb1a3610a3729dbd978ce6857275d"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/ui/src/inventory-identity.ts",
+        "sha256": "7826559d51d7655dd0be118ceb91bd45960ac95846169ca472158652fbf51c78"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/ui/src/main.tsx",
+        "sha256": "13be4492a0816837dbb3d5a43a5ce4e212e8c05a4d539ae33c9fbc11b673e05c"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/ui/src/style.css",
+        "sha256": "4b348d04145318700be49215c0d7e9b10755c9bc3004f21b5bb22ed3632765f1"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/ui/tsconfig.json",
+        "sha256": "6638bd472066974fba6584a914461dca1a25bced5a6ccba152759d4c9d11b471"
+      },
+      {
+        "path": "demos/order-exception-saas/trial/ui/vite.config.ts",
+        "sha256": "1d75815600adbccb3e982771db805e02ecf801ff16cc6dc32ef7dd300bcc8ee1"
+      }
+    ],
+    "dependencies": {
+      "node": "v22.23.3",
+      "python": "fixed existing .artifacts/rq03-baseline-20261101/venv/bin/python; requirements declared but fresh install not verified"
+    },
+    "checks": [
+      "trial UI npm ci, typecheck, build on copied-source checkout",
+      "trial backend focused Python unittest: 5 passed",
+      "apps/webhost/test_tailnet_view.py after policy extraction: 15 passed",
+      "390px saved-run readback and live browser/API/SQLite inspection"
+    ],
+    "sharedState": "no Gateway config, lockfile, public /trial/, GPU model installation, or external deployment changed"
+  },
+  "savedRunReadback": {
+    "source": "detached clean HEAD plus only trial source and tailnet_access.py copied from working tree",
+    "execution": "saved_run_readback; no new model run; no Keycloak/OpenFGA browser operation",
+    "oldRun": {
+      "id": "order-run-152ebb4048614f47bf724be6d82a79e1",
+      "status": "failed",
+      "errorCode": "source_stale",
+      "drafts": 0
+    },
+    "currentRun": {
+      "id": "order-run-029865a5b9c44da98bb99431291f937f",
+      "status": "completed",
+      "drafts": 2,
+      "modelTextStored": true
+    },
+    "health": {
+      "modelConfigured": false,
+      "authenticationMode": "none_local_trial"
+    },
+    "browser": {
+      "width": 390,
+      "oldDocumentWidth": 390,
+      "currentDocumentWidth": 390,
+      "pageErrors": [],
+      "writeMethods": []
+    },
+    "business": {
+      "orderVersion": 7,
+      "status": "exception_detected",
+      "warehouseB": 17,
+      "customer_responses": 0,
+      "approvals": 0,
+      "reservations": 0,
+      "shipment_instructions": 0
+    }
+  },
+  "liveRun": {
+    "kind": "local_browser_overlay_real_model_authenticated_synthetic_inventory",
+    "ui": "clean-checkout local build over fixed Tailnet origin; not deployed",
+    "api": "isolated cloned SQLite; not public service",
+    "identity": "real local Keycloak and OpenFGA; synthetic Bob",
+    "model": "local real qwen3:8b, direct Ollama",
+    "input": "合成受注40箱の不足15箱を調べ、在庫・便・契約に根拠がある別送案を示してください。顧客回答と出荷承認は待ってください。",
+    "before": {
+      "version": 6,
+      "status": "exception_detected",
+      "trialId": "trial-5df8f63288734c588476ebca37ea62b8",
+      "warehouseB": 18,
+      "agent_runs": 7,
+      "customer_responses": 0,
+      "approvals": 0,
+      "reservations": 0,
+      "shipment_instructions": 0
+    },
+    "after": {
+      "version": 7,
+      "status": "exception_detected",
+      "trialId": "trial-5df8f63288734c588476ebca37ea62b8",
+      "warehouseB": 17,
+      "agent_runs": 9,
+      "customer_responses": 0,
+      "approvals": 0,
+      "reservations": 0,
+      "shipment_instructions": 0
+    },
+    "oldRun": {
+      "id": "order-run-827ce137292f4a3d8f5d4d75846b040e",
+      "status": "failed",
+      "errorCode": "source_stale",
+      "humanWaitSeconds": 600,
+      "toolNames": [
+        "read_order_inventory",
+        "read_carriers_contract"
+      ],
+      "eventKinds": [
+        "status",
+        "source_read",
+        "source_read",
+        "source_read",
+        "source_read",
+        "source_read",
+        "source_read",
+        "source_read",
+        "status",
+        "human_inventory_count"
+      ],
+      "optionCount": 0,
+      "modelTextStored": false
+    },
+    "newRun": {
+      "id": "order-run-8bd7bda3ea134148b390cb7ee9f10b68",
+      "status": "completed",
+      "errorCode": null,
+      "humanWaitSeconds": 0,
+      "toolNames": [
+        "read_order_inventory",
+        "read_carriers_contract"
+      ],
+      "eventKinds": [
+        "status",
+        "source_read",
+        "source_read",
+        "source_read",
+        "source_read",
+        "source_read",
+        "source_read",
+        "source_read",
+        "draft_rejected",
+        "draft_submitted"
+      ],
+      "optionCount": 2,
+      "modelTextStored": true
+    },
+    "correctionHttp": 200,
+    "correctionResult": {
+      "orderVersion": 7,
+      "previousAvailableBoxes": 18,
+      "availableBoxes": 17,
+      "authenticationMode": "keycloak_oidc_openfga_local_trial"
+    },
+    "posts": [
+      {
+        "path": "/trial/api/orders/SO-24017/agent-runs",
+        "status": 200,
+        "bearerPresent": false
+      },
+      {
+        "path": "/trial/api/orders/SO-24017/inventory-count",
+        "status": 200,
+        "bearerPresent": true
+      },
+      {
+        "path": "/trial/api/orders/SO-24017/agent-runs",
+        "status": 200,
+        "bearerPresent": false
+      }
+    ],
+    "modelTextStored": true,
+    "modelTextClaimErrors": [
+      "normal warehouse B said 2026-11-16 while saved API draft is 2026-11-17",
+      "contract split acceptance asserted before customer consent and without contract evaluation",
+      "text says before API saving although 2 drafts were stored"
+    ],
+    "savedDraftBody": "通常便を使う別送比較案。warehouse-a 25箱 2026-11-16T10:00:00+09:00 (carrier-a-normal-v3)、warehouse-b 15箱 2026-11-17T10:00:00+09:00 (carrier-b-normal-v3)。追加費用 0円。 特急便を使う別送案。warehouse-a 25箱 2026-11-16T10:00:00+09:00 (carrier-a-normal-v3)、warehouse-b 15箱 2026-11-16T10:00:00+09:00 (carrier-b-express-v3)。追加費用 78000円。 通常便案の倉庫B分は受注希望2026-11-16 10:00より24時間後の到着です。 両倉庫を一つの便に集約できる資料はありません。 追加費用の負担先は資料にありません。 原資料との数値一致だけを照合しました。業務案と契約適合は未判定です。",
+    "oldRunDurationSeconds": 11,
+    "newRunDurationSeconds": 65,
+    "pageErrors": []
+  },
+  "browserEvidence": {
+    "width": 390,
+    "oldDocumentWidth": 390,
+    "newDocumentWidth": 390,
+    "validScreens": [
+      "00-request.png",
+      "01-agent-two-tools-human-wait.png",
+      "02-bob-ready-to-correct.png",
+      "04-new-run-saved-result.png"
+    ],
+    "excludedScreen": "03-old-run-stopped.png was captured while DOM still displayed running; only old-run-stopped-readback-390.png shows stopped state, and that is a later saved-run readback, not live stop frame",
+    "rootPath": ".artifacts/oe02-source-checkout-20261109-1205/live-screens/",
+    "savedRunStopReadback": {
+      "screen": "/home/omote/windows-import/workspace-win/tech-playground/.artifacts/oe02-source-checkout-20261109-1205/old-run-stopped-readback-390.png",
+      "scope": "saved_run_readback_only; copied synthetic SQLite through localhost Vite read-only UI; no new model, Keycloak, OpenFGA, or public service operation",
+      "status": "failed",
+      "errorCode": "source_stale",
+      "savedDrafts": 0,
+      "reloadFirstfoldVisible": true,
+      "documentWidth": 390,
+      "nonReadRequests": [],
+      "business": {
+        "customer_responses": 0,
+        "approvals": 0,
+        "reservations": 0,
+        "shipment_instructions": 0
+      },
+      "sourceDbSha256BeforeAfter": "5892d8a530ec5bc8061c84fc6d758aa35097ad28da834d69d863cd7ed77224bf"
+    }
+  },
+  "independentReview": "Separate reviewer checked tool responses and hashes, Bob operation, draft/business tables; local synthetic run accepted within scope; screenshot #03 rejected; Git-only reproduction and deployed version not accepted",
+  "unmet": [
+    "parent demo.yaml and registered CI not included in copied trial source scope",
+    "Git commit and PR/CI for parent demo/trial not completed",
+    "external Keycloak/OpenFGA, private auth config, Ollama model, Tailnet origin needed for full live replay",
+    "public /trial/ remains older version",
+    "owner device, real staff/data and R1-R4 remain unaccepted"
+  ],
+  "officialSpec": {
+    "maf": "https://learn.microsoft.com/agent-framework/tutorials/agents/run-agent?pivots=programming-language-python",
+    "checked": "2026-11-09; response.text aggregates TextContent across messages, so stored model text is SDK aggregate, not guaranteed final assistant-only answer"
+  },
+  "newViewerArtifact": false,
+  "tailscape": {
+    "url": "https://omote-llm.tail47e89e.ts.net:10443/",
+    "status": 200,
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "documentWidth": 390,
+      "bodyWidth": 390
+    },
+    "firstFoldHasState": true,
+    "firstFoldHasDirectLink": true,
+    "firstFoldHasNextGate": true,
+    "directLink": "https://tech-playground-oe02-replay-20261109.omoteforlab.chatgpt.site/journey-20261109-1105.html",
+    "pageErrors": [],
+    "requestFailures": [],
+    "screen": ".artifacts/oe02-source-checkout-20261109-1205/tailscape-qa-1205-390.png"
+  }
+}
