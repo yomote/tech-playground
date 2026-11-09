@@ -13,8 +13,8 @@ let initialization: Promise<boolean> | undefined;
 export function initializeInventoryIdentity(): Promise<boolean> {
   initialization ??= inventoryIdentity.init({
     onLoad: 'check-sso',
-    // The isolated Keycloak client allows this exact redirect URI only.
-    redirectUri: `${window.location.origin}/trial/`,
+    // The isolated Keycloak client must allow the configured mount's exact redirect URI.
+    redirectUri: `${window.location.origin}${import.meta.env.BASE_URL}`,
     pkceMethod: 'S256',
     checkLoginIframe: false,
   });

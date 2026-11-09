@@ -9,7 +9,7 @@ from threading import Thread
 import unittest
 from unittest.mock import patch
 
-from owner_entry import make_server
+from owner_entry import allowed_path, make_server
 
 
 class FakeBackend(BaseHTTPRequestHandler):
@@ -84,6 +84,13 @@ class OwnerEntryBoundaryTest(unittest.TestCase):
         self.assertEqual(health["businessRoleMode"], "declared_role_fixture")
         self.assertEqual(self.backend.last_headers["Host"], f"127.0.0.1:{self.backend.server_port}")
         self.assertNotIn("Tailscale-User-Login", self.backend.last_headers)
+
+    def test_unsent_review_route_is_exactly_scoped(self) -> None:
+        route = "/api/orders/SO-24017/customer-preview-review"
+        self.assertTrue(allowed_path(route, "POST"))
+        self.assertFalse(allowed_path(route, "GET"))
+        self.assertFalse(allowed_path(route + "/send", "POST"))
+        self.assertFalse(allowed_path("/api/orders/other/customer-preview-review", "POST"))
 
 
 if __name__ == "__main__":

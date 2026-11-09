@@ -29,6 +29,10 @@ from source_fixtures import (CARRIER_SOURCES, CONTRACT_SOURCE, FIXTURE_ID,
                              FIXTURE_VERSION, INITIAL_ORDER_VERSION,
                              ORDER_DUE_AT, SCENARIO_TIME, source_facts_sha256)
 from inventory_auth import InventoryAccessError, InventoryAuthorizer
+from reply_assessment import assess_saved_reply
+from customer_preview import customer_preview
+from review_fact_contract import (APPROVED_QUESTIONS, CONTRACT_VERSION, ReviewFactError,
+                                  validate_review_fact_contract)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -311,6 +315,31 @@ class OrderStore:
                     responded_at TEXT NOT NULL
                 );
             """)
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS customer_preview_reviews (
+                    id TEXT PRIMARY KEY,
+                    order_id TEXT NOT NULL REFERENCES orders(id),
+                    trial_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL REFERENCES agent_runs(id),
+                    order_version INTEGER NOT NULL,
+                    review_basis_sha256 TEXT NOT NULL,
+                    original_text TEXT NOT NULL,
+                    edited_text TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    actor_role TEXT NOT NULL,
+                    operation_id TEXT NOT NULL UNIQUE,
+                    request_json TEXT NOT NULL,
+                    recorded_at TEXT NOT NULL,
+                    UNIQUE (order_id, trial_id, run_id)
+                )
+            """)
+            review_columns = {item[1] for item in connection.execute(
+                "PRAGMA table_info(customer_preview_reviews)")}
+            if "fact_contract_version" not in review_columns:
+                connection.execute(
+                    "ALTER TABLE customer_preview_reviews ADD COLUMN fact_contract_version "
+                    "TEXT NOT NULL DEFAULT 'legacy_unchecked'"
+                )
             order_columns = {item[1] for item in connection.execute("PRAGMA table_info(orders)")}
             if "current_trial_id" not in order_columns:
                 connection.execute("ALTER TABLE orders ADD COLUMN current_trial_id TEXT")
@@ -614,12 +643,192 @@ class OrderStore:
             return {"orderId": order_id, "currentTrialId": order["current_trial_id"],
                     "agentRuns": [self._run_presentation(connection, row) for row in rows]}
 
+    def _customer_preview_with_review(
+            self, connection: sqlite3.Connection, row: sqlite3.Row,
+            saved: dict[str, Any]) -> dict[str, Any]:
+        review = connection.execute(
+            "SELECT * FROM customer_preview_reviews WHERE order_id = ? "
+            "AND trial_id = ? AND run_id = ?",
+            (row["order_id"], row["trial_id"], row["id"]),
+        ).fetchone()
+
+        def historical_review() -> dict[str, Any]:
+            assert review is not None
+            return {
+                "id": review["id"], "originalText": review["original_text"],
+                "editedText": review["edited_text"], "reason": review["reason"],
+                "recordedAt": review["recorded_at"],
+                "reviewBasisSha256": review["review_basis_sha256"],
+                "orderVersion": review["order_version"],
+                "actorRole": review["actor_role"],
+                "authorizationMode": "declared_role_fixture",
+                "factCheckStatus": (
+                    "protected_facts_unchanged"
+                    if review["fact_contract_version"] == CONTRACT_VERSION
+                    else "legacy_unchecked"
+                ),
+                "historical": True, "verified": False,
+                "verificationStatus": "historical_unverified", "sendable": False,
+            }
+
+        order = self._get_order_row(connection, row["order_id"])
+        latest = connection.execute(
+            "SELECT id FROM agent_runs WHERE order_id = ? AND trial_id = ? "
+            "ORDER BY rowid DESC LIMIT 1", (row["order_id"], order["current_trial_id"]),
+        ).fetchone()
+        inventory = connection.execute(
+            "SELECT warehouse_id, available FROM inventory ORDER BY warehouse_id"
+        ).fetchall()
+        preview = customer_preview(
+            saved, current_order=self._order(order),
+            current_inventory=[{"warehouseId": item["warehouse_id"], "available": item["available"]}
+                               for item in inventory],
+            latest_run_id=latest["id"] if latest is not None else None,
+        )
+        if preview["status"] != "available":
+            # A saved edit remains readable after any expiry or source failure.
+            # It is never re-projected as a current customer message.
+            if review is not None:
+                preview["historicalReview"] = historical_review()
+            return preview
+        # Bind the review to the exact saved proposal, Tool returns, original
+        # projected wording, trial, and order version. Never hash model prose.
+        basis = {
+            "runId": row["id"], "trialId": row["trial_id"],
+            "orderVersion": order["version"], "draft": saved["draft"],
+            "sourceSnapshot": saved["sourceSnapshot"],
+            "toolResponses": saved["toolResponses"], "originalText": preview["text"],
+        }
+        digest = hashlib.sha256(_json(basis).encode("utf-8")).hexdigest()
+        if review is not None and (
+                review["review_basis_sha256"] != digest or
+                review["original_text"] != preview["text"] or
+                review["order_version"] != order["version"]):
+            return {
+                "status": "not_available", "basis": "saved_structured_draft",
+                "limitations": preview["limitations"], "historical": False,
+                "sendable": False,
+                "reason": "保存後に文案の根拠が変わりました。再調査してください。",
+                "historicalReview": historical_review(),
+            }
+        preview["reviewBasisSha256"] = digest
+        preview["reviewScope"] = "two_option_customer_preview"
+        preview["reviewAuthorizationMode"] = "declared_role_fixture"
+        preview["reviewEditScope"] = "approved_question_choice_only; generated facts and disclaimer locked"
+        preview["reviewQuestionChoices"] = list(APPROVED_QUESTIONS)
+        preview["review"] = None if review is None else {
+            "id": review["id"], "originalText": review["original_text"],
+            "editedText": review["edited_text"], "reason": review["reason"],
+            "actorRole": review["actor_role"],
+            "authorizationMode": "declared_role_fixture",
+            "verified": False, "verificationStatus": "unverified",
+            "sendable": False, "assessed": False,
+            "reviewScope": "two_option_customer_preview",
+            "reviewBasisSha256": review["review_basis_sha256"],
+            "factCheckStatus": (
+                "protected_facts_unchanged" if review["fact_contract_version"] == CONTRACT_VERSION
+                else "legacy_unchecked"
+            ),
+            "factCheckScope": (
+                "locked_factual_lines_and_approved_question"
+                if review["fact_contract_version"] == CONTRACT_VERSION else "none"
+            ),
+            "orderVersion": review["order_version"],
+            "recordedAt": review["recorded_at"],
+        }
+        return preview
+
     def get_run(self, run_id: str) -> dict[str, Any]:
         with closing(self._connect()) as connection:
             row = connection.execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
             if row is None:
                 raise ApiError(404, "not_found", "Agent実行が見つかりません。")
-            return self._run_presentation(connection, row)
+            saved = self._run_presentation(connection, row)
+            saved["replyAssessment"] = assess_saved_reply(saved)
+            saved["customerPreview"] = self._customer_preview_with_review(connection, row, saved)
+            return saved
+
+    def record_customer_preview_review(self, order_id: str, raw: object) -> dict[str, Any]:
+        """Save one human edit as an unverified, unsent synthetic review note."""
+        body = self._payload(raw, {
+            "runId", "trialId", "expectedVersion", "expectedPreviewSha256",
+            "reason", "editedText", "operationId", "actorRole",
+        })
+        run_id = body["runId"]
+        if not isinstance(run_id, str) or re.fullmatch(r"order-run-[0-9a-f]{32}", run_id) is None:
+            raise ApiError(400, "validation_error", "Agent実行IDを確認してください。")
+        if not isinstance(body["trialId"], str) or not body["trialId"]:
+            raise ApiError(400, "validation_error", "試行IDを確認してください。")
+        expected_version = _expected_version(body["expectedVersion"])
+        digest = body["expectedPreviewSha256"]
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ApiError(400, "validation_error", "文案の照合値を確認してください。")
+        operation_id = _operation_id(body["operationId"])
+        if body["actorRole"] != "order_clerk":
+            raise ApiError(403, "review_role_required", "合成受注担当者役の修正だけ記録できます。")
+        reason, edited = body["reason"], body["editedText"]
+        if (not isinstance(reason, str) or not reason.strip() or
+                len(reason.encode("utf-8")) > 1500 or
+                not isinstance(edited, str) or not edited.strip() or
+                len(edited.encode("utf-8")) > 12000 or
+                any(ord(char) < 32 and char not in "\n\r\t" or ord(char) == 127
+                    for char in reason + edited)):
+            raise ApiError(400, "validation_error", "修正理由と修正文の長さ・文字を確認してください。")
+        with closing(self._connect()) as connection:
+            with connection:
+                connection.execute("BEGIN IMMEDIATE")
+                order = self._get_order_row(connection, order_id)
+                self._check_version(order, expected_version)
+                if order["current_trial_id"] != body["trialId"]:
+                    raise ApiError(409, "stale_trial", "前回の試行には修正を保存できません。")
+                if order["status"] != "exception_detected":
+                    raise ApiError(409, "review_not_available", "顧客回答後には修正を保存できません。")
+                row = connection.execute(
+                    "SELECT * FROM agent_runs WHERE id = ? AND order_id = ?",
+                    (run_id, order_id),
+                ).fetchone()
+                if row is None:
+                    raise ApiError(404, "not_found", "Agent実行が見つかりません。")
+                if row["trial_id"] != body["trialId"]:
+                    raise ApiError(409, "stale_trial", "前回の試行には修正を保存できません。")
+                previous = connection.execute(
+                    "SELECT * FROM customer_preview_reviews WHERE operation_id = ?",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    if (previous["order_id"] != order_id or previous["trial_id"] != body["trialId"] or
+                            previous["run_id"] != run_id or previous["request_json"] != _json(body)):
+                        raise ApiError(409, "operation_conflict", "同じ操作IDで異なる内容は送信できません。")
+                    return {"run": self.get_run(run_id)}
+                if connection.execute(
+                        "SELECT 1 FROM operations WHERE operation_id = ?", (operation_id,)
+                ).fetchone():
+                    raise ApiError(409, "operation_conflict", "同じ操作IDは再利用できません。")
+                saved = self._run_presentation(connection, row)
+                preview = self._customer_preview_with_review(connection, row, saved)
+                if preview["status"] != "available":
+                    raise ApiError(409, "review_not_available", "現在の保存案を再確認してください。")
+                if preview["reviewBasisSha256"] != digest:
+                    raise ApiError(409, "preview_mismatch", "文案の根拠が変わりました。再読込してください。")
+                if edited.strip() == preview["text"].strip():
+                    raise ApiError(422, "unchanged_review_text", "元の文案と異なる修正文を入力してください。")
+                if preview["review"] is not None:
+                    raise ApiError(409, "review_already_recorded", "この保存案には修正が記録済みです。")
+                try:
+                    validate_review_fact_contract(preview["text"], edited)
+                except ReviewFactError as error:
+                    raise ApiError(422, error.code, str(error)) from error
+                review_id = f"preview-review-{uuid4().hex}"
+                connection.execute(
+                    "INSERT INTO customer_preview_reviews (id, order_id, trial_id, run_id, "
+                    "order_version, review_basis_sha256, original_text, edited_text, reason, "
+                    "actor_role, operation_id, request_json, recorded_at, fact_contract_version) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (review_id, order_id, body["trialId"], run_id, expected_version,
+                     digest, preview["text"], edited, reason.strip(), "order_clerk",
+                     operation_id, _json(body), _now(), CONTRACT_VERSION),
+                )
+        return {"run": self.get_run(run_id)}
 
     def get_run_state(self, run_id: str) -> dict[str, Any]:
         """Read only the terminal state needed by the human wait gate."""
@@ -2173,6 +2382,8 @@ class Handler(SimpleHTTPRequestHandler):
                 result = self.store.request_cost_source_review(parts[2], body)
             elif parts[3] == "cost-source-review-response":
                 result = self.store.respond_cost_source_review(parts[2], body)
+            elif parts[3] == "customer-preview-review":
+                result = self.store.record_customer_preview_review(parts[2], body)
             elif parts[3] == "new-trial":
                 result = self.store.new_trial(parts[2], body)
             elif parts[3] == "inventory-count":

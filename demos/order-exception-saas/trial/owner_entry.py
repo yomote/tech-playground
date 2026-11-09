@@ -54,6 +54,7 @@ POST_PATHS = {
     ORDER_BASE + "/agent-decision",
     ORDER_BASE + "/cost-source-review",
     ORDER_BASE + "/cost-source-review-response",
+    ORDER_BASE + "/customer-preview-review",
     ORDER_BASE + "/new-trial",
     INVENTORY_COUNT,
 }

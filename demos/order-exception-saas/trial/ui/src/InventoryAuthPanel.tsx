@@ -24,11 +24,11 @@ export function InventoryAuthPanel({ detail, authInitError, onReadback }: Props)
   const localNoAuth = import.meta.env.DEV && import.meta.env.VITE_OE02_LOCAL_NO_AUTH === 'true';
   const username = String(inventoryIdentity.tokenParsed?.preferred_username || 'ログイン済み担当者');
   const login = async () => {
-    try { await inventoryIdentity.login({ redirectUri: `${window.location.origin}/trial/` }); }
+    try { await inventoryIdentity.login({ redirectUri: `${window.location.origin}${import.meta.env.BASE_URL}` }); }
     catch { setMessage('Keycloakのログイン画面を開けません。認証サービスを確認してください。'); }
   };
   const logout = async () => {
-    try { await inventoryIdentity.logout({ redirectUri: `${window.location.origin}/trial/` }); }
+    try { await inventoryIdentity.logout({ redirectUri: `${window.location.origin}${import.meta.env.BASE_URL}` }); }
     catch { setMessage('ログアウトを完了できません。画面を再読込してログイン状態を確認してください。'); }
   };
   const readSavedState = async () => {

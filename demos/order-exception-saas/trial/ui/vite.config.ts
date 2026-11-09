@@ -1,15 +1,21 @@
 import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
-  const localNoAuth = loadEnv(mode, '.', 'VITE_OE02_').VITE_OE02_LOCAL_NO_AUTH === 'true';
+  const trialEnv = loadEnv(mode, '.', 'VITE_OE02_');
+  const localNoAuth = trialEnv.VITE_OE02_LOCAL_NO_AUTH === 'true';
+  const mount = trialEnv.VITE_OE02_MOUNT ?? '/trial';
+  if (mount !== '/trial' && mount !== '/trial-next') {
+    throw new Error('VITE_OE02_MOUNT must be /trial or /trial-next');
+  }
+  const apiPath = `${mount}/api`;
   return {
-    base: '/trial/',
+    base: `${mount}/`,
     plugins: localNoAuth ? [{
       name: 'local-saved-run-readback',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
           const pathname = new URL(req.url || '/', 'http://localhost').pathname;
-          if ((pathname === '/trial/api' || pathname.startsWith('/trial/api/')) &&
+          if ((pathname === apiPath || pathname.startsWith(`${apiPath}/`)) &&
               !['GET', 'HEAD', 'OPTIONS'].includes(req.method || '')) {
             res.statusCode = 405;
             res.setHeader('Allow', 'GET, HEAD, OPTIONS');
@@ -26,10 +32,10 @@ export default defineConfig(({ mode }) => {
       port: 5346,
       strictPort: true,
       proxy: {
-        '/trial/api': {
+        [apiPath]: {
           target: loadEnv(mode, '.', 'OE02_').OE02_TRIAL_BACKEND_URL || 'http://127.0.0.1:19601',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/trial/, ''),
+          rewrite: (path) => path.slice(mount.length),
         },
       },
     },

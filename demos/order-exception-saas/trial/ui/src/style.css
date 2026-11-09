@@ -582,3 +582,109 @@ button.option-card:focus-visible,
     flex-wrap: wrap;
   }
 }
+
+.reply-assessment-firstfold {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #d9bc86;
+  overflow-wrap: anywhere;
+}
+
+.reply-assessment-firstfold .MuiButton-root {
+  padding-left: 0;
+}
+
+.reply-assessment-details {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #c8d6df;
+  overflow-wrap: anywhere;
+}
+
+.reply-assessment-details:focus {
+  outline: 3px solid #276f57;
+  outline-offset: 3px;
+}
+
+.reply-assessment-claims {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reply-assessment-claim {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-left: 3px solid #986018;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+
+.reply-assessment-claim:last-child {
+  margin-bottom: 0;
+}
+.customer-preview-copy {
+  margin-top: 14px;
+  padding: 16px;
+  border-left: 4px solid #183552;
+  background: #f5f8fa;
+  color: #17314c;
+  overflow-wrap: anywhere;
+}
+
+.customer-preview-copy p {
+  max-width: 72ch;
+}
+
+.customer-review {
+  margin-top: 18px;
+  padding: 18px;
+  border-color: #b8cad6 !important;
+  box-shadow: none !important;
+  overflow-wrap: anywhere;
+}
+
+.customer-review-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.customer-review-comparison > div {
+  min-width: 0;
+}
+
+.customer-review-copy {
+  margin-top: 6px !important;
+  padding: 12px;
+  border-left: 3px solid #183552;
+  background: #f5f8fa;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.customer-review-locked {
+  padding: 12px;
+  border: 1px solid #b8cad6;
+  background: #f5f8fa;
+}
+
+.customer-review-locked .customer-review-copy {
+  margin-top: 8px !important;
+  margin-bottom: 0;
+  background: #fff;
+}
+
+.customer-review-selected {
+  padding: 12px;
+  border-left: 3px solid #183552;
+  background: #f5f8fa;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .customer-review { padding: 14px; }
+  .customer-review-comparison { grid-template-columns: 1fr; }
+  .customer-review .MuiButton-root { max-width: 100%; white-space: normal; text-align: left; }
+}

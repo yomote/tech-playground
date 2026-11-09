@@ -7,11 +7,14 @@ import {
   createTheme,
 } from '@mui/material';
 import { InventoryAuthPanel } from './InventoryAuthPanel';
+import { CustomerPreviewPanel, type CustomerPreview } from './CustomerPreview';
+import type { CustomerReview } from './CustomerReview';
+import { ReplyAssessmentDetails, ReplyAssessmentFirstfold, type ReplyAssessment } from './ReplyAssessment';
 import { initializeInventoryIdentity, inventoryAccessToken, inventoryIdentity } from './inventory-identity';
 import './style.css';
 
 const orderId = 'SO-24017';
-const trialBase = '/trial';
+const trialBase = import.meta.env.BASE_URL.replace(/\/$/, '');
 const base = `${trialBase}/api/orders/${orderId}`;
 const requestText = '合成受注40箱の不足15箱を調べ、在庫・便・契約に根拠がある別送案を示してください。顧客回答と出荷承認は待ってください。';
 
@@ -51,6 +54,8 @@ type Run = {
   agentVersion?: string;
   errorCode?: string;
   modelFinalReply?: string;
+  replyAssessment?: ReplyAssessment;
+  customerPreview?: CustomerPreview;
   sourceSnapshot?: { order?: { version?: number; dueAt?: string } };
   events: Event[];
   toolResponses?: ToolResponse[];
@@ -780,6 +785,15 @@ function App({ authInitError }: { authInitError: string }) {
     detail?.order.status === 'exception_detected' && !detail.customerResponse);
   const readableDraft = hasServerDraft(run);
   const runReady = currentRun && !olderRun && readableDraft;
+  const showCustomerPreview = run?.executionMode === 'live_model' && Boolean(readableDraft || run.customerPreview);
+  const customerPreviewAvailable = runReady && !readOnlyRun && run?.customerPreview?.historical === false &&
+    run.customerPreview.status === 'available' &&
+    run.customerPreview.basis === 'saved_structured_draft' && run.customerPreview.sendable === false &&
+    typeof run.customerPreview.text === 'string' && run.customerPreview.text.trim().length > 0;
+  const customerResponseSaved = Boolean(!readOnlyRun && detail?.customerResponse &&
+    (!detail.customerResponse.runId || detail.customerResponse.runId === run?.id));
+  const approvalSaved = Boolean(!readOnlyRun && detail?.approval &&
+    (!detail.approval.runId || detail.approval.runId === run?.id));
   const draftReady = readableDraft && run.status === 'draft_ready';
   const proposals = readableDraft ? run.draft.plan?.proposals ?? [] : [];
   const inventoryCorrectionStoppedRun = Boolean(currentRun && sourceChangedSinceRead &&
@@ -844,12 +858,54 @@ function App({ authInitError }: { authInitError: string }) {
           : run ? testDoubleRun ? '固定試験が資料読取イベントを記録中。人の回答はまだ不要です' : 'Agentが資料を確認中。人の回答はまだ不要です'
             : '依頼する人：合成受注の調査を送信してください';
 
+  const saveCustomerReview = async (values: { reason: string; editedText: string; operationId: string }): Promise<CustomerReview> => {
+    const targetRun = run;
+    const preview = targetRun?.customerPreview;
+    if (!targetRun || !detail || !customerPreviewAvailable || !preview?.reviewBasisSha256 ||
+        preview.reviewScope !== 'two_option_customer_preview' ||
+        preview.review || !currentRun || readOnlyRun || detail.order.status !== 'exception_detected') {
+      throw new Error('現行runの未送信文案を確認できません。保存状態を読み直してください。');
+    }
+    const response = await jsonRequest<{ run?: Run; message?: string; error?: string }>(
+      `${base}/customer-preview-review`, {
+        runId: targetRun.id,
+        trialId: targetRun.trialId,
+        expectedVersion: detail.order.version,
+        expectedPreviewSha256: preview.reviewBasisSha256,
+        reason: values.reason,
+        editedText: values.editedText,
+        operationId: values.operationId,
+        actorRole: 'order_clerk',
+      });
+    append('合成受注担当者役の未送信修正文を保存', response.status,
+      response.data.run?.customerPreview?.review?.id || response.data.error || '保存なし');
+    const saved = response.data.run?.customerPreview?.review;
+    if (response.status !== 200 || !saved || saved.originalText !== preview.text ||
+        saved.editedText !== values.editedText || saved.verified !== false || saved.sendable !== false) {
+      throw new Error(response.data.message || `修正文を保存できません（HTTP ${response.status}）。現行runと資料版を確認してください。`);
+    }
+    setRun(response.data.run!);
+    return saved;
+  };
+  const readCustomerReview = async (): Promise<CustomerReview | null> => {
+    if (!run) throw new Error('読戻すrunを確認できません。');
+    const [fresh] = await Promise.all([loadRun(run.id), loadDetail(true)]);
+    const review = fresh.customerPreview?.review ?? null;
+    append('未送信修正文を同じrunから読戻し', 200, review?.id || '保存なし');
+    return review;
+  };
+
   return <ThemeProvider theme={theme}><CssBaseline />
     <Box className="app-header"><Container maxWidth="lg" className="header-inner">
       <Typography className="brand">Tech Playground｜出荷例外</Typography>
       <Chip className="mode-chip" variant="outlined" label={executionLabel} />
     </Container></Box>
     <Container maxWidth="lg" className="main-content">
+      {showCustomerPreview && customerPreviewAvailable &&
+        <CustomerPreviewPanel preview={run?.customerPreview} readOnlyRun={readOnlyRun} localReadOnly={localNoAuth} allowText={customerPreviewAvailable}
+          customerResponseSaved={customerResponseSaved} approvalSaved={approvalSaved}
+          runId={run?.id} canReview={!localNoAuth && !customerResponseSaved && !approvalSaved && detail?.order.status === 'exception_detected'}
+          onReviewSave={saveCustomerReview} onReviewReadback={readCustomerReview}/>}
       {run?.status === 'failed' && run.errorCode === 'source_stale' && <Alert severity="warning"
         className="firstfold-result" data-testid="stopped-run-firstfold" role="status">
         <Typography component="h2" className="firstfold-result-title">旧調査は停止・保存案0件</Typography>
@@ -879,13 +935,14 @@ function App({ authInitError }: { authInitError: string }) {
         <Typography variant="body2">保存runの読戻しです。{testDoubleRun
           ? '固定試験の提出値を業務APIが資料と照合しました。モデルは呼んでいません。'
           : '局所実モデルのTool提出値を業務APIが資料と照合しました。'}顧客回答・出荷承認は別の操作です。</Typography>
+        {run?.executionMode === 'live_model' && run.status === 'completed' && <ReplyAssessmentFirstfold assessment={run.replyAssessment}/>}
         {run?.executionMode === 'live_model' && run.status === 'completed' && detail && <Alert severity="warning" sx={{ mt: 1 }} data-testid="structured-delivery-firstfold">
           <Typography variant="body2" sx={{ fontWeight: 700 }}>業務API保存値の納期照合：保存runの受注希望納期 {plannedDate(savedDueAt)}（第{savedOrderVersion ?? '不明'}版）</Typography>
           {!sameOrderVersion && <Typography variant="body2">現在の受注は第{detail.order.version}版、Tool参照は第{readOrderVersion ?? '不明'}版です。版を照合できないため、現行受注との納期比較はできません。</Typography>}
           {proposals.map((proposal, index) => <Typography key={proposal.id} variant="body2">
             案{index + 1}：{proposalArrivalVerdict(proposal, savedDueAt, sameOrderVersion)}（{proposal.shipments.map(item => `${warehouse(item.warehouseId)} ${plannedDate(item.deliveryAt)}`).join('／') || '到着予定不明'}）
           </Typography>)}
-          <Typography variant="caption" color="text.secondary">モデル原文の到着日と照合してください。契約適合は未判定です。</Typography>
+          <Typography variant="caption" color="text.secondary">下の返答照合結果と保存値を確認してください。契約適合は未判定です。</Typography>
         </Alert>}
         <Button size="small" variant="outlined" sx={{ mt: 1.5 }}
           onClick={() => document.querySelector('[data-testid="saved-options"]')?.scrollIntoView({ behavior: 'smooth' })}>
@@ -895,7 +952,29 @@ function App({ authInitError }: { authInitError: string }) {
           onClick={() => document.querySelector('[data-testid="model-final-reply"]')?.scrollIntoView({ behavior: 'smooth' })}>
           モデル原文と照合する
         </Button>}
+        {run?.customerPreview?.status === 'available' && <Button size="small" variant="text" sx={{ mt: 1.5, ml: { sm: 1 } }}
+          onClick={() => document.querySelector('[data-testid="customer-preview"]')?.scrollIntoView({ behavior: 'smooth' })}>
+          未送信の顧客向け文案を見る
+        </Button>}
       </Alert>}
+      {readOnlyRun && readableDraft && run?.executionMode === 'live_model' && run.status === 'completed' &&
+        <Alert severity="warning" className="firstfold-result" data-testid="saved-old-options-firstfold" role="status">
+          <Typography component="h2" className="firstfold-result-title">旧run・閲覧専用の保存結果</Typography>
+          <Typography variant="body2">この局所実モデルrunには構造化案{proposals.length}件が保存されています。現在の試行の案としては使えず、このrunから顧客回答・出荷承認はできません。</Typography>
+          <Typography variant="body2" sx={{ mt: 0.5 }}>保存run {run.id}／保存時の受注第{savedOrderVersion ?? '不明'}版／現在の受注第{detail?.order.version ?? '不明'}版</Typography>
+          <ReplyAssessmentFirstfold assessment={run.replyAssessment}/>
+          <Button size="small" variant="outlined" sx={{ mt: 1.5 }}
+            onClick={() => document.querySelector('[data-testid="saved-options"]')?.scrollIntoView({ behavior: 'smooth' })}>
+            この旧runの保存案を見る
+          </Button>
+          <Button size="small" variant="text" sx={{ mt: 1.5, ml: { sm: 1 } }}
+            onClick={() => document.querySelector('[data-testid="customer-preview"]')?.scrollIntoView({ behavior: 'smooth' })}>
+            {run.customerPreview?.historicalReview ? '保存時の未送信文案を見る' : '顧客向け文案を表示できない理由を見る'}
+          </Button>
+        </Alert>}
+      {showCustomerPreview && !customerPreviewAvailable &&
+        <CustomerPreviewPanel preview={run?.customerPreview} readOnlyRun={readOnlyRun} allowText={customerPreviewAvailable}
+          customerResponseSaved={customerResponseSaved} approvalSaved={approvalSaved}/>}
       <Alert severity="info" className="scope-strip">
         {localNoAuth
           ? '複製DBで保存runと業務状態を確認しています。ここではKeycloakとOpenFGAに接続せず、新しい実モデルrunも開始しません。'
@@ -1021,11 +1100,11 @@ function App({ authInitError }: { authInitError: string }) {
             </Alert>
             <Typography variant="body2" sx={{ mt: 1 }}>モード：{run.executionMode}／{testDoubleRun ? '固定試験ランナー' : 'モデル'}：{run.modelId || '記録なし'}／経路：{run.modelRoute || '記録なし'}／業務レビュー：{run.draft?.businessReviewStatus || '未実施'}／契約レビュー：{run.draft?.contractReviewStatus || '未実施'}</Typography>
             {run.executionMode === 'live_model' && run.status === 'completed' && <Box className="live-activity" sx={{ mt: 2 }} data-testid="model-final-reply">
-              <Typography component="h3" className="activity-title">SDKが返したテキスト（集約）</Typography>
+              <Typography component="h3" className="activity-title">Agent返答として保存したテキスト</Typography>
+              <ReplyAssessmentDetails assessment={run.replyAssessment}/>
               {run.modelFinalReply
-                ? <><Alert severity="warning" sx={{ mb: 1 }}>モデル原文の事実・契約判断は未検証です。受注の例外状態、顧客回答、承認、出荷と案の根拠は下の業務API保存結果で確認してください。</Alert>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{modelReplyPlainText(run.modelFinalReply)}</Typography>
-                    <Typography variant="caption" color="text.secondary">AgentResponse.text はrun中のテキスト内容を集約します。最後の発話だけかは未確認です。保存したテキストを画面では記号のない本文に投影しています。</Typography></>
+                ? <><Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{modelReplyPlainText(run.modelFinalReply)}</Typography>
+                    <Typography variant="caption" color="text.secondary">AgentResponse.text はrun中のテキスト内容を集約した値で、最後の発話だけを指しません。画面ではMarkdown記号を除いた本文を表示し、保存原文は変更していません。</Typography></>
                 : <Typography variant="body2" color="text.secondary">このrunのSDKテキストは保存されていません。下の案文は業務APIが構造化値から作成したものです。</Typography>}
             </Box>}
             {run.executionMode === 'live_model' && run.status === 'completed' && readableDraft && detail &&
