@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from source_fixtures import CARRIER_SOURCES, CONTRACT_SOURCE, ORDER_DUE_AT
+from source_fixtures import CARRIER_SOURCES, CONTRACT_SOURCE
 
 
 class DraftGroundingError(ValueError):
@@ -196,11 +196,17 @@ def validate_structured_draft(snapshot: dict[str, Any], plan: dict[str, Any],
             {item["carrierSourceId"] for proposal in verified for item in proposal["shipments"]}):
         raise DraftGroundingError("draft_grounding_failed", "proposals",
                                   "normal_and_express_required")
+    normal_delivery_at = CARRIER_SOURCES["carrier-b-normal-v3"]["earliestDeliveryAt"]
+    normal_delivery = _when(normal_delivery_at, "carrierSources.earliestDeliveryAt")
+    due = _when(order["dueAt"], "order.dueAt")
+    normal_due_relation = ("希望日時より後" if normal_delivery > due else
+                           "希望日時と同時刻" if normal_delivery == due else "希望日時より前")
     return {
         "proposals": verified,
         "customerQuestions": ["A/B別送による分納を承諾しますか。",
                               "倉庫Bの特急便利用を希望しますか。追加費用78,000円の負担先は別途確認が必要です。"],
-        "limitations": [f"通常便案の倉庫B分は受注希望{ORDER_DUE_AT[:16].replace('T', ' ')}より24時間後の到着です。",
+        "limitations": [f"通常便案の倉庫B分は{normal_delivery_at.replace('T', ' ')}到着予定です。"
+                        f"受注希望{order['dueAt'].replace('T', ' ')}との比較では予定上{normal_due_relation}です。",
                         "両倉庫を一つの便に集約できる資料はありません。",
                         "追加費用の負担先は資料にありません。",
                         "原資料との数値一致だけを照合しました。業務案と契約適合は未判定です。"],

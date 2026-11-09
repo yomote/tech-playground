@@ -25,8 +25,9 @@ from uuid import UUID, uuid4
 
 from draft_gate import DraftGroundingError, validate_structured_draft
 from order_agent import AGENT_VERSION
-from source_fixtures import (CARRIER_SOURCES, CONTRACT_SOURCE, FIXTURE_VERSION,
-                             ORDER_DUE_AT, SCENARIO_TIME)
+from source_fixtures import (CARRIER_SOURCES, CONTRACT_SOURCE, FIXTURE_ID,
+                             FIXTURE_VERSION, INITIAL_ORDER_VERSION,
+                             ORDER_DUE_AT, SCENARIO_TIME, source_facts_sha256)
 from inventory_auth import InventoryAccessError, InventoryAuthorizer
 
 
@@ -62,10 +63,12 @@ OPTIONS: tuple[dict[str, Any], ...] = (
     {
         "id": "split-delivery",
         "title": "倉庫Aの25箱は11月16日、倉庫Bの15箱は11月17日に納品",
-        "summary": "倉庫Aの25箱は希望日時に、倉庫Bの15箱は希望より24時間遅れて納品する固定比較案です。分納には顧客の承諾が必要です。",
+        "summary": "倉庫Aの25箱は11月16日、倉庫Bの15箱は11月17日に到着予定の固定比較案です。分納には顧客の承諾が必要です。",
         "allocations": [
-            {"warehouseId": "warehouse-a", "quantity": 25, "deliveryAt": ORDER_DUE_AT},
-            {"warehouseId": "warehouse-b", "quantity": 15, "deliveryAt": "2026-11-17T10:00:00+09:00"},
+            {"warehouseId": "warehouse-a", "quantity": 25,
+             "deliveryAt": CARRIER_SOURCES["carrier-a-normal-v3"]["earliestDeliveryAt"]},
+            {"warehouseId": "warehouse-b", "quantity": 15,
+             "deliveryAt": CARRIER_SOURCES["carrier-b-normal-v3"]["earliestDeliveryAt"]},
         ],
         "additionalCostJpy": 0,
         "requiresCustomerConsent": True,
@@ -80,8 +83,10 @@ OPTIONS: tuple[dict[str, Any], ...] = (
         "title": "一括輸送を想定した固定比較案（集約根拠なし）",
         "summary": "倉庫A/Bそれぞれの便資料はありますが、荷物を一つの便へ集約する根拠はありません。承認不可の固定比較案です。",
         "allocations": [
-            {"warehouseId": "warehouse-a", "quantity": 25, "deliveryAt": ORDER_DUE_AT},
-            {"warehouseId": "warehouse-b", "quantity": 15, "deliveryAt": ORDER_DUE_AT},
+            {"warehouseId": "warehouse-a", "quantity": 25,
+             "deliveryAt": CARRIER_SOURCES["carrier-a-normal-v3"]["earliestDeliveryAt"]},
+            {"warehouseId": "warehouse-b", "quantity": 15,
+             "deliveryAt": CARRIER_SOURCES["carrier-b-express-v3"]["earliestDeliveryAt"]},
         ],
         "additionalCostJpy": 78000,
         "requiresCustomerConsent": True,
@@ -144,13 +149,37 @@ class OrderStore:
             # A previous dated fixture has different order terms. Refuse it
             # before schema migration or seed writes; the owner must select a
             # fresh DB for the new synthetic source set.
-            if connection.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='orders'").fetchone():
+            existing_tables = {item[0] for item in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )}
+            if existing_tables and "orders" not in existing_tables:
+                raise RuntimeError("synthetic_fixture_mismatch: use a fresh DB for this fixture version")
+            if "orders" in existing_tables:
                 old_order = connection.execute(
                     "SELECT due_at FROM orders WHERE id = ?", (ORDER_ID,)).fetchone()
-                if old_order is not None and old_order["due_at"] != ORDER_DUE_AT:
+                has_fixture_meta = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fixture_meta'").fetchone()
+                meta_columns = ({item[1] for item in connection.execute("PRAGMA table_info(fixture_meta)")}
+                                if has_fixture_meta else set())
+                if has_fixture_meta and "source_facts_sha256" not in meta_columns:
+                    raise RuntimeError("synthetic_fixture_mismatch: use a fresh DB for this fixture version")
+                meta = (connection.execute(
+                    "SELECT fixture_id, due_at, initial_order_version, source_facts_sha256 FROM fixture_meta "
+                    "WHERE singleton = 1").fetchone() if has_fixture_meta else None)
+                if (old_order is None or old_order["due_at"] != ORDER_DUE_AT or
+                        meta is None or meta["fixture_id"] != FIXTURE_ID or
+                        meta["due_at"] != ORDER_DUE_AT or
+                        meta["initial_order_version"] != INITIAL_ORDER_VERSION or
+                        meta["source_facts_sha256"] != source_facts_sha256()):
                     raise RuntimeError("synthetic_fixture_mismatch: use a fresh DB for this fixture version")
             connection.executescript("""
+                CREATE TABLE IF NOT EXISTS fixture_meta (
+                    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                    fixture_id TEXT NOT NULL,
+                    due_at TEXT NOT NULL,
+                    initial_order_version INTEGER NOT NULL,
+                    source_facts_sha256 TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS orders (
                     id TEXT PRIMARY KEY, customer_name TEXT NOT NULL,
                     item_name TEXT NOT NULL, sku TEXT NOT NULL,
@@ -319,11 +348,15 @@ class OrderStore:
                                    "source_fixture_version TEXT NOT NULL DEFAULT '3.0'")
             with connection:
                 connection.execute(
+                    "INSERT OR IGNORE INTO fixture_meta VALUES (1, ?, ?, ?, ?)",
+                    (FIXTURE_ID, ORDER_DUE_AT, INITIAL_ORDER_VERSION, source_facts_sha256()),
+                )
+                connection.execute(
                     "INSERT OR IGNORE INTO orders "
                     "(id, customer_name, item_name, sku, quantity, due_at, status, version) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (ORDER_ID, "東都部品販売（合成顧客）", "産業用部品", "PART-40", 40,
-                     ORDER_DUE_AT, "exception_detected", 1),
+                     ORDER_DUE_AT, "exception_detected", INITIAL_ORDER_VERSION),
                 )
                 for warehouse_id, available in INITIAL_INVENTORY.items():
                     connection.execute(
@@ -367,6 +400,7 @@ class OrderStore:
             "id": row["id"], "customerName": row["customer_name"],
             "itemName": row["item_name"], "sku": row["sku"],
             "quantity": row["quantity"], "dueAt": row["due_at"],
+            "fixtureId": FIXTURE_ID,
             "status": row["status"], "version": row["version"],
             "currentTrialId": row["current_trial_id"],
             "nextActor": next_actor, "nextAction": next_action,
@@ -396,7 +430,8 @@ class OrderStore:
             "sources": {
                 "order": {
                     "sourceId": f"order-{order_id}-v{row['version']}",
-                    "fixtureVersion": FIXTURE_VERSION, "orderVersion": row["version"],
+                    "fixtureVersion": FIXTURE_VERSION, "fixtureId": FIXTURE_ID,
+                    "orderVersion": row["version"],
                     "recordedAt": SCENARIO_TIME, "capturedAt": captured_at,
                     "sku": row["sku"], "quantityBoxes": row["quantity"],
                     "dueAt": row["due_at"], "dataMode": "synthetic_fixture",
@@ -493,7 +528,8 @@ class OrderStore:
         expires_at = min(cutoffs)
         return {"newRunAvailable": datetime.now(timezone.utc) < expires_at,
                 "scenarioExpiresAt": expires_at.isoformat(),
-                "fixtureVersion": FIXTURE_VERSION, "dataMode": "synthetic_fixture"}
+                "fixtureVersion": FIXTURE_VERSION, "fixtureId": FIXTURE_ID,
+                "dataMode": "synthetic_fixture"}
 
     @staticmethod
     def _validate_request(request_text: object, expected_version: object) -> tuple[str, int]:
