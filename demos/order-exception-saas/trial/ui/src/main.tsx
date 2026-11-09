@@ -51,6 +51,7 @@ type Run = {
   agentVersion?: string;
   errorCode?: string;
   modelFinalReply?: string;
+  sourceSnapshot?: { order?: { version?: number; dueAt?: string } };
   events: Event[];
   toolResponses?: ToolResponse[];
   sourceRefAttempts?: SourceRefAttempt[];
@@ -153,6 +154,42 @@ function date(value: string) {
   return Number.isNaN(parsed.valueOf()) ? value : new Intl.DateTimeFormat('ja-JP', {
     year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Tokyo',
   }).format(parsed);
+}
+function plannedTimestamp(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6]) > 59 ||
+    (match[7] !== 'Z' && (Number(match[8]) > 14 || Number(match[9]) > 59 ||
+      (Number(match[8]) === 14 && Number(match[9]) !== 0)))) return null;
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  if (year < 100 || calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 || calendar.getUTCDate() !== day) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+function plannedDate(value: unknown): string {
+  return plannedTimestamp(value) === null ? '日時不明' : `${date(value as string)} JST`;
+}
+function arrivalVerdict(deliveryAt: unknown, dueAt: unknown, sameOrderVersion: boolean): string {
+  if (!sameOrderVersion) return '受注版を照合できず比較不可';
+  const delivery = plannedTimestamp(deliveryAt);
+  const due = plannedTimestamp(dueAt);
+  if (delivery === null || due === null) return '比較不可';
+  return delivery > due ? '予定上は納期超過' : '予定上は納期内';
+}
+function proposalArrivalVerdict(proposal: Proposal, dueAt: unknown, sameOrderVersion: boolean): string {
+  if (!sameOrderVersion) return '受注版を照合できず比較不可';
+  const due = plannedTimestamp(dueAt);
+  const arrivals = proposal.shipments.map(item => plannedTimestamp(item.deliveryAt));
+  if (!arrivals.length || due === null || arrivals.some(value => value === null)) return '日時が不足し比較不可';
+  const latest = Math.max(...arrivals as number[]);
+  if (latest <= due) return '予定上は全便が納期内';
+  const minutes = Math.ceil((latest - due) / 60000);
+  const delay = minutes % 60 === 0 ? `${minutes / 60}時間` : `${minutes}分`;
+  return `予定上は希望日時を${delay}超過`;
 }
 function yen(value: number) { return `${value.toLocaleString('ja-JP')}円`; }
 function modelReplyPlainText(value: string) {
@@ -726,6 +763,10 @@ function App({ authInitError }: { authInitError: string }) {
   const readOrderSourceId = run?.toolResponses?.find(item => item.toolName === 'read_order_inventory')
     ?.sourceIds.find(id => /^order-SO-24017-v\d+$/.test(id));
   const readOrderVersion = readOrderSourceId ? Number(readOrderSourceId.match(/-v(\d+)$/)?.[1]) : undefined;
+  const savedOrderVersion = run?.sourceSnapshot?.order?.version;
+  const savedDueAt = run?.sourceSnapshot?.order?.dueAt;
+  const sameOrderVersion = Boolean(detail && savedOrderVersion !== undefined &&
+    savedOrderVersion === detail.order.version && readOrderVersion === savedOrderVersion);
   const sourceChangedSinceRead = Boolean(detail && readOrderVersion !== undefined &&
     readOrderVersion !== detail.order.version);
   const draftSubmitted = Boolean(run?.events.some(event => event.kind === 'draft_submitted'));
@@ -838,10 +879,22 @@ function App({ authInitError }: { authInitError: string }) {
         <Typography variant="body2">保存runの読戻しです。{testDoubleRun
           ? '固定試験の提出値を業務APIが資料と照合しました。モデルは呼んでいません。'
           : '局所実モデルのTool提出値を業務APIが資料と照合しました。'}顧客回答・出荷承認は別の操作です。</Typography>
+        {run?.executionMode === 'live_model' && run.status === 'completed' && detail && <Alert severity="warning" sx={{ mt: 1 }} data-testid="structured-delivery-firstfold">
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>業務API保存値の納期照合：保存runの受注希望納期 {plannedDate(savedDueAt)}（第{savedOrderVersion ?? '不明'}版）</Typography>
+          {!sameOrderVersion && <Typography variant="body2">現在の受注は第{detail.order.version}版、Tool参照は第{readOrderVersion ?? '不明'}版です。版を照合できないため、現行受注との納期比較はできません。</Typography>}
+          {proposals.map((proposal, index) => <Typography key={proposal.id} variant="body2">
+            案{index + 1}：{proposalArrivalVerdict(proposal, savedDueAt, sameOrderVersion)}（{proposal.shipments.map(item => `${warehouse(item.warehouseId)} ${plannedDate(item.deliveryAt)}`).join('／') || '到着予定不明'}）
+          </Typography>)}
+          <Typography variant="caption" color="text.secondary">モデル原文の到着日と照合してください。契約適合は未判定です。</Typography>
+        </Alert>}
         <Button size="small" variant="outlined" sx={{ mt: 1.5 }}
           onClick={() => document.querySelector('[data-testid="saved-options"]')?.scrollIntoView({ behavior: 'smooth' })}>
           保存案の条件を見る
         </Button>
+        {run?.modelFinalReply && <Button size="small" variant="text" sx={{ mt: 1.5, ml: { sm: 1 } }}
+          onClick={() => document.querySelector('[data-testid="model-final-reply"]')?.scrollIntoView({ behavior: 'smooth' })}>
+          モデル原文と照合する
+        </Button>}
       </Alert>}
       <Alert severity="info" className="scope-strip">
         {localNoAuth
@@ -975,6 +1028,19 @@ function App({ authInitError }: { authInitError: string }) {
                     <Typography variant="caption" color="text.secondary">AgentResponse.text はrun中のテキスト内容を集約します。最後の発話だけかは未確認です。保存したテキストを画面では記号のない本文に投影しています。</Typography></>
                 : <Typography variant="body2" color="text.secondary">このrunのSDKテキストは保存されていません。下の案文は業務APIが構造化値から作成したものです。</Typography>}
             </Box>}
+            {run.executionMode === 'live_model' && run.status === 'completed' && readableDraft && detail &&
+              <Box className="live-activity" sx={{ mt: 2 }} data-testid="structured-delivery-check">
+                <Typography component="h3" className="activity-title">業務API保存値：希望納期と案の到着予定</Typography>
+                <Typography variant="body2">保存runの受注希望納期：{plannedDate(savedDueAt)}（第{savedOrderVersion ?? '不明'}版）</Typography>
+                {!sameOrderVersion && <Typography variant="body2">現在の受注は第{detail.order.version}版、Tool参照は第{readOrderVersion ?? '不明'}版です。版を照合できないため、現行受注との納期比較はできません。</Typography>}
+                {proposals.map((proposal, index) => <Box key={proposal.id} sx={{ mt: 1 }} data-testid={`structured-delivery-option-${index + 1}`}>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>案{index + 1}：{proposalArrivalVerdict(proposal, savedDueAt, sameOrderVersion)}</Typography>
+                  {proposal.shipments.map(item => <Typography key={item.warehouseId} variant="body2">
+                    {warehouse(item.warehouseId)} {item.quantityBoxes}箱：到着予定 {plannedDate(item.deliveryAt)}／{arrivalVerdict(item.deliveryAt, savedDueAt, sameOrderVersion)}
+                  </Typography>)}
+                </Box>)}
+                <Typography variant="caption" color="text.secondary">保存runの到着予定と保存runの受注希望納期を日時で比較しました。実際の到着、契約適合、費用負担先は未判定です。</Typography>
+              </Box>}
             {testDoubleRun && <Alert severity="info" sx={{ mt: 1 }}>このrunは固定試験です。モデルは呼んでいません。資料読取イベントも固定試験ランナーが記録しました。</Alert>}
             {(run.status === 'running' || run.status === 'queued') && <Stack direction="row" spacing={1} sx={{ mt: 2 }}><CircularProgress size={18}/><Typography>{testDoubleRun ? '固定試験' : 'Agent'}の保存記録を待機中</Typography></Stack>}
             <Box className="live-activity" aria-live="polite">
