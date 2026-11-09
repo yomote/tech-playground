@@ -17,6 +17,9 @@ export type ReplyAssessment = {
 function resultText(assessment?: ReplyAssessment): string {
   if (!assessment) return '返答の照合結果を取得できません。モデル原文を確認済みとは扱えません。';
   if (assessment.status === 'contradiction_found') {
+    if (assessment.claims.some(item => item.id === 'save_state' && item.verdict === 'contradicted')) {
+      return 'モデル返答は案を未保存・保存予定と説明していますが、この保存runには案が保存済みです。文章生成時点の状態は未判定です。';
+    }
     return `モデル返答に業務APIの保存値と食い違う記述があります（${assessment.claims.filter(item => item.verdict === 'contradicted').length}項目）。`;
   }
   if (assessment.status === 'no_contradiction_found') {

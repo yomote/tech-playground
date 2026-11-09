@@ -22,8 +22,12 @@ _CARRIER_DATE = re.compile(
     r"(?:[+-]\d\d:\d\d)?)"
 )
 _UNSAVED_ASSERTION = re.compile(r"(?:保存前です|未保存です|保存していません|まだ保存されていません)[。.]?\s*$")
+_FUTURE_SAVE_ASSERTION = re.compile(
+    r"(?:今後|これから)[、, ]*業務API(?:での|による|の)最終照合[・と]保存"
+    r"(?:が行われます|を行います|します|されます|の予定です)[。.]?\s*$"
+)
 _PAST_SAVE_CONTEXT = re.compile(r"(?:生成時点|生成した時点|提出時点|提出した時点|当時|保存前だった)")
-_CURRENT_PROPOSAL_SUBJECT = re.compile(r"(?:この案|提出案|現行案|現在の案|業務APIの最終照合)")
+_CURRENT_PROPOSAL_SUBJECT = re.compile(r"(?:この案|提出案|現行案|現在の案|業務API(?:の|での|による)最終照合)")
 _OTHER_SAVE_SUBJECT = re.compile(r"(?:顧客回答|旧案|過去案|前の案|承認|出荷指示)")
 
 
@@ -112,11 +116,12 @@ def assess_saved_reply(run: dict[str, Any]) -> dict[str, Any]:
     proposals = draft.get("plan", {}).get("proposals") if isinstance(draft, dict) else None
     saved_proposals = proposals if isinstance(proposals, list) else []
     for line in prose.splitlines():
-        match = _UNSAVED_ASSERTION.search(line)
+        match = _UNSAVED_ASSERTION.search(line) or _FUTURE_SAVE_ASSERTION.search(line)
         if (match and saved_proposals and
                 not _quoted_or_negated(line, match.start(), match.end()) and
                 _PAST_SAVE_CONTEXT.search(line[:match.start()]) is None and
-                _CURRENT_PROPOSAL_SUBJECT.search(line[:match.start()]) is not None and
+                (_CURRENT_PROPOSAL_SUBJECT.search(line[:match.start()]) is not None or
+                 _CURRENT_PROPOSAL_SUBJECT.search(match.group()) is not None) and
                 _OTHER_SAVE_SUBJECT.search(line[:match.start()]) is None):
             result["claims"].append({
                 "id": "save_state", "label": "案の保存状態", "verdict": "contradicted",

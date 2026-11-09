@@ -901,6 +901,11 @@ function App({ authInitError }: { authInitError: string }) {
       <Chip className="mode-chip" variant="outlined" label={executionLabel} />
     </Container></Box>
     <Container maxWidth="lg" className="main-content">
+      {runReady && run?.executionMode === 'live_model' && run.status === 'completed' &&
+        run.replyAssessment?.claims.some(item => item.id === 'save_state' && item.verdict === 'contradicted') &&
+        <Alert severity="warning" className="firstfold-result" data-testid="reply-warning-top" role="status">
+          <ReplyAssessmentFirstfold assessment={run.replyAssessment}/>
+        </Alert>}
       {showCustomerPreview && customerPreviewAvailable &&
         <CustomerPreviewPanel preview={run?.customerPreview} readOnlyRun={readOnlyRun} localReadOnly={localNoAuth} allowText={customerPreviewAvailable}
           customerResponseSaved={customerResponseSaved} approvalSaved={approvalSaved}
@@ -935,7 +940,9 @@ function App({ authInitError }: { authInitError: string }) {
         <Typography variant="body2">保存runの読戻しです。{testDoubleRun
           ? '固定試験の提出値を業務APIが資料と照合しました。モデルは呼んでいません。'
           : '局所実モデルのTool提出値を業務APIが資料と照合しました。'}顧客回答・出荷承認は別の操作です。</Typography>
-        {run?.executionMode === 'live_model' && run.status === 'completed' && <ReplyAssessmentFirstfold assessment={run.replyAssessment}/>}
+        {run?.executionMode === 'live_model' && run.status === 'completed' &&
+          !run.replyAssessment?.claims.some(item => item.id === 'save_state' && item.verdict === 'contradicted') &&
+          <ReplyAssessmentFirstfold assessment={run.replyAssessment}/>}
         {run?.executionMode === 'live_model' && run.status === 'completed' && detail && <Alert severity="warning" sx={{ mt: 1 }} data-testid="structured-delivery-firstfold">
           <Typography variant="body2" sx={{ fontWeight: 700 }}>業務API保存値の納期照合：保存runの受注希望納期 {plannedDate(savedDueAt)}（第{savedOrderVersion ?? '不明'}版）</Typography>
           {!sameOrderVersion && <Typography variant="body2">現在の受注は第{detail.order.version}版、Tool参照は第{readOrderVersion ?? '不明'}版です。版を照合できないため、現行受注との納期比較はできません。</Typography>}

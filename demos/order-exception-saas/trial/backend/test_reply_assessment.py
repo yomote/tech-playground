@@ -27,6 +27,28 @@ def sample_run(reply: str) -> dict:
 
 
 class ReplyAssessmentTest(unittest.TestCase):
+    def test_saved_real_reply_future_save_is_flagged_at_display_time(self) -> None:
+        run = sample_run(
+            "**確認事項:**\n- 今後、業務APIでの最終照合・保存が行われます。  \n"
+            "※ 今後、顧客の回答や出荷承認の進展を待機してください。"
+        )
+        result = assess_saved_reply(run)
+        self.assertEqual(result["status"], "contradiction_found")
+        claim = next(item for item in result["claims"] if item["id"] == "save_state")
+        self.assertIn("今後、業務APIでの最終照合・保存", claim["modelQuote"])
+        self.assertIn("構造化案1件", claim["savedValue"])
+        self.assertIn("文章生成時点の状態は未判定", claim["reason"])
+
+    def test_future_save_quote_and_other_objects_are_not_assessed(self) -> None:
+        for prose in (
+            "「今後、業務APIでの最終照合・保存が行われます」は誤り。",
+            "顧客回答の保存が今後行われます。",
+            "今後、顧客回答と出荷承認が行われます。",
+            "生成時点では今後、業務APIでの最終照合・保存が行われます。",
+        ):
+            with self.subTest(prose=prose):
+                self.assertEqual(assess_saved_reply(sample_run(prose))["status"], "not_assessed")
+
     def test_real_failure_is_label_and_save_state_not_date_value(self) -> None:
         run = sample_run(
             "carrier-b-normal-v3（出荷日：2026-11-17 10:00、費用：0円）\n"
