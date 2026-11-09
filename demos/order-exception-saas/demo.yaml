@@ -1,0 +1,33 @@
+id: order-exception-saas
+title: B2B受注の出荷例外対応
+status: working
+kind: sample-app
+summary: 卸売受注の欠品を起点に、代替出荷案、顧客回答、最終承認、出荷指示までの業務状態を追う合成デモ。
+goal: AI AgentをB2B受注の出荷例外業務に組み込み、業務成果と共通基盤の各機能を3役で検証する。
+questions:
+  - 欠品受注で、どの情報が不足し、次に誰が何を決めるか
+  - Agentが在庫・配送・契約を調べた結果は、人の出荷判断を助けるか
+  - 契約確認Agentの追加前後で、同じ受注の誤りと作業時間はどう変わるか
+  - 認可とGateway制限を適用しても、業務の状態を安全に進められるか
+tags: [sample-app, b2b, order-fulfillment, ai-platform, mui]
+stack: [python, react, mui, vite]
+findings:
+  - 2026-10-19、業務シナリオと3役のシーケンスを設計した。新しい出荷業務の実装・実測ではない。
+  - 2026-10-19、固定案の合成受注で顧客回答、模擬役割による最終承認、引当と出荷指示の保存・再読込をHTTP検査と実ブラウザーで確認した。AI生成と実認可は未接続。
+  - 2026-10-19、実MAFの業務API runで専門Agentの選択、合成原資料7件の読取り、案の提出を保存したが、管理Agentが終了せず180秒で時間切れ。完成案と出荷変更はない。画面は失敗と途中経過を区別して表示する。
+  - 2026-11-09、別契約のtrial/へ隔離試行のUI・業務API・本人限定入口ソースを移した。複製DBと別ポートの390px画面で旧runのsource_stale・保存案0から現行2案へ移動し、再読込後も2案。保存状態の受注第6版・倉庫B18箱・回答/承認/出荷なしは前後不変。保存run読戻しであり、新しい推論・配備ではない。
+references:
+  - title: 在庫補正から再調査までの5画面（本人限定・保存再生・操作不可）
+    url: https://tech-playground-oe02-replay-20261109.omoteforlab.chatgpt.site/journey-20261109-1105.html
+  - title: 出荷例外の隔離試行（本人限定・保存run読戻し）
+    url: https://omote-llm.tail47e89e.ts.net:12443/trial/?run=order-run-68ed697905084e27aeb8a89696e5ab14
+  - title: Microsoftの受注履行モデル
+    url: https://learn.microsoft.com/en-us/dynamics365/intelligent-order-management/fulfillment-entity-relationships
+  - title: Microsoftの配送代替案
+    url: https://learn.microsoft.com/en-us/dynamics365/supply-chain/sales-marketing/delivery-alternatives
+createdAt: 2026-10-19
+updatedAt: 2026-11-09
+app:
+  url: https://omote-llm.tail47e89e.ts.net:12443/trial/
+  label: 既存の隔離操作画面を開く
+  notice: 本人限定の旧配備版です。このGit候補の変更は未反映です。受注と資料は合成です。

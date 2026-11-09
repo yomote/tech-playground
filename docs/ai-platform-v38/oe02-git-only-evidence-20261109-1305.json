@@ -1,0 +1,139 @@
+{
+  "date": "2026-11-09",
+  "startJst": "13:05",
+  "owner": "root",
+  "scope": "OE-02 synthetic order, local Git-only candidate and saved-run readback; no new model inference, authenticated human operation, external deployment, or release acceptance",
+  "candidate": {
+    "baseRevision": "dc6b3f12b93b45b3e24a926f8570ca3e37540a39",
+    "branch": "codex/oe02-source-candidate-20261109-1305",
+    "commit": "7e828edadf25c3d97d5ae481adc2d60fd9cf28db",
+    "changedFiles": 40,
+    "cleanCheckout": true,
+    "sourceHashComparison": {
+      "against": "docs/ai-platform-v38/oe02-clean-source-evidence-20261109-1205.json",
+      "checked": 21,
+      "mismatches": []
+    },
+    "sourceBoundary": "parent demo.yaml/UI/API plus isolated trial/UI/backend, owner-entry policy, pinned npm and pnpm locks; no DB, credentials, dist, model, or runtime log in commit"
+  },
+  "operation": {
+    "kind": "saved_run_readback",
+    "request": "合成受注40箱の不足15箱を調べ、在庫補正があれば現行案を出し直す。顧客回答と出荷承認は待つ。",
+    "historySource": "12:05 local real qwen3:8b and synthetic Bob Keycloak/OpenFGA run in a copied-source checkout; this turn reads its SQLite backup from the Git-only UI/API",
+    "readback": {
+      "source": "Git-only checkout of candidate commit 7e828edadf25c3d97d5ae481adc2d60fd9cf28db",
+      "execution": "saved_run_readback; no new model run; no Keycloak/OpenFGA browser operation",
+      "oldRun": {
+        "id": "order-run-152ebb4048614f47bf724be6d82a79e1",
+        "status": "failed",
+        "errorCode": "source_stale",
+        "drafts": 0
+      },
+      "currentRun": {
+        "id": "order-run-029865a5b9c44da98bb99431291f937f",
+        "status": "completed",
+        "drafts": 2,
+        "modelTextStored": true
+      },
+      "health": {
+        "modelConfigured": false,
+        "authenticationMode": "none_local_trial"
+      },
+      "browser": {
+        "width": 390,
+        "oldDocumentWidth": 390,
+        "currentDocumentWidth": 390,
+        "pageErrors": [],
+        "writeMethods": []
+      },
+      "business": {
+        "orderVersion": 7,
+        "status": "exception_detected",
+        "warehouseB": 17,
+        "customer_responses": 0,
+        "approvals": 0,
+        "reservations": 0,
+        "shipment_instructions": 0
+      }
+    },
+    "screens": {
+      "old-run-git-only-390.png": {
+        "path": ".artifacts/oe02-git-checkout-20261109-1305/.artifacts/git-only-readback/old-run-git-only-390.png",
+        "sha256": "2d8ee4230ab0eaa9075ce57f1c10f8684992747b6af3bf2fab3948bf0a4afa41"
+      },
+      "current-run-git-only-390.png": {
+        "path": ".artifacts/oe02-git-checkout-20261109-1305/.artifacts/git-only-readback/current-run-git-only-390.png",
+        "sha256": "3f04a095b2a3e073c366651e27d6b2e2641c27c4873e50478c8f4de74c0c8197"
+      }
+    },
+    "dbSource": "SQLite backup of the 12:05 synthetic run; separate local file; read-only projection after operation"
+  },
+  "verification": {
+    "frozenPnpmInstall": "passed offline",
+    "trialNpmCi": "passed offline",
+    "metadataValidate": "passed",
+    "parentBuild": "passed",
+    "trialUiBuild": "passed",
+    "registeredLocalChecks": {
+      "count": 12,
+      "passed": true,
+      "statuses": {
+        "root-build": "passed",
+        "root-typecheck": "passed",
+        "root-lint": "passed",
+        "root-tests": "passed",
+        "magentic-scrum-runner": "passed",
+        "ci-readiness-contract": "passed",
+        "decision-workbench-contract": "passed",
+        "order-exception-parent-contract": "passed",
+        "order-exception-trial-contract": "passed",
+        "order-exception-owner-entry-contract": "passed",
+        "order-exception-trial-ui-typecheck": "passed",
+        "order-exception-trial-ui-build": "passed"
+      },
+      "sourceRevision": "7e828edadf25c3d97d5ae481adc2d60fd9cf28db",
+      "targetRevision": "dc6b3f12b93b45b3e24a926f8570ca3e37540a39",
+      "releaseStatus": "needs-review",
+      "reviewExecutor": "mock",
+      "planningExecutor": "mock",
+      "note": "local pinned DevOps Agent 0.1.1 run; not GitHub PR CI or semantic review"
+    },
+    "independentReview": "separate agent accepted only local Git-only source and saved-run readback; independently recalculated all 21 source SHA-256 values against the 12:05 evidence, and verified screen/API/SQLite and exclusions"
+  },
+  "unmet": [
+    "Portal HEAD schema cannot express the existing sample-app category; candidate omits kind and app.url, so Portal does not lead to the operation page",
+    "candidate README/BACKLOG relative historical evidence links refer to docs not included in the source-only branch",
+    "GitHub PR registered CI, real semantic review of shared adoption, and new real-model/authenticated run from candidate commit are unverified",
+    "public /trial/ is the older deployed version; existing owner-only 5-scene replay is static and noninteractive",
+    "user-device first-use and real staff/data, R1-R4 release acceptance remain unverified"
+  ],
+  "viewer": {
+    "newArtifact": false,
+    "existingReplay": "https://tech-playground-oe02-replay-20261109.omoteforlab.chatgpt.site/journey-20261109-1105.html",
+    "kind": "private static saved replay; not this Git candidate and not interactive",
+    "dashboardChanged": false,
+    "notionChanged": false,
+    "tailscapePublicLinkChanged": false,
+    "tailscapeReadback": {
+      "url": "https://omote-llm.tail47e89e.ts.net:10443/",
+      "httpStatus": 200,
+      "viewportWidth": 390,
+      "documentWidth": 390,
+      "firstFold": [
+        "局所実モデルの在庫補正・旧案停止・再調査を保存再生で確認可能。",
+        "在庫補正から再調査までの5画面（本人限定・保存再生・操作不可）",
+        "rootがOE-02候補のPortal表示と過去証拠リンクを整え、PRの登録CIを試せる状態にする。予定日未定。"
+      ],
+      "pageErrors": 0,
+      "requestFailures": 0,
+      "screenshot": ".artifacts/oe02-git-checkout-20261109-1305/.artifacts/tailscape-qa-1305-390-viewport.png",
+      "daemonConfigurationChanged": false,
+      "note": "live Tailscape reads updated docs/ai-roadmap.json; no new demo artifact or new Site deployment"
+    }
+  },
+  "nextOperation": {
+    "owner": "root",
+    "action": "close the candidate Portal category/direct-link presentation and historical evidence links before draft PR/registered GitHub CI",
+    "plannedDate": "undetermined"
+  }
+}

@@ -1,0 +1,36 @@
+# 出荷例外の隔離試行ソース
+
+このディレクトリには、合成受注 `SO-24017` の局所実モデル試行で使った業務APIと本人限定入口のソースを置く。リポジトリ直下の `demos/order-exception-saas/server.py` と `src/` は、固定案を含む別のAPI契約である。両者のDBと画面を混用しない。
+
+画面はルートのpnpm workspaceに含まれない。新しい作業環境では、Node 22で `cd demos/order-exception-saas/trial/ui && npm ci && npm run typecheck && npm run build` を実行する。生成した `dist/` はGitに入れず、業務APIの `--dist` に指定する。
+
+保存runをローカルで読む場合は、元DBをSQLiteのbackup APIで別ファイルに複製して `--db` に指定し、業務APIを別ポートで起動する。別端末で `VITE_OE02_LOCAL_NO_AUTH=true npm run dev` を実行すると、`http://127.0.0.1:5346/trial/` が業務APIの別ポートへ `/trial/api` を転送する。初期値は `127.0.0.1:19601`、変更時は `OE02_TRIAL_BACKEND_URL` を指定する。このモードは保存runの局所確認用で、KeycloakとOpenFGAを接続せず、画面でその範囲を表示する。画面の書込ボタンは無効で、Vite経由のAPI書込は405で拒否する。業務APIのポートへ直接送る書込はこの開発用ガードの外なので、必ず複製DBを使う。実認証の在庫補正や新しい実モデルrunを確認した証拠にはしない。
+
+## 起動に必要なもの
+
+- Python はリポジトリの `.artifacts/rq03-baseline-20261101/venv/bin/python` を使う。この環境には固定した Microsoft Agent Framework と OpenFGA SDK が必要。`--single-agent` は `agent_framework` を読み、在庫補正の認可は `openfga_sdk` を使う。
+- モデル接続には `ORDER_AGENT_MODEL_ID`、`ORDER_AGENT_API_KEY`、`ORDER_AGENT_BASE_URL`、`ORDER_AGENT_ROUTE`、`ORDER_AGENT_PROTOCOL` を設定する。前回の局所試行は `qwen3:8b`、loopback の Ollama `/v1`、`direct`、`chat-completions` を使用した。接続できなければ実モデルの結果は生成されない。
+- 業務APIは独立したSQLiteファイルを `--db` で指定する。画面は `trial/ui/dist` を `--dist` で指定する。DB、認証設定、モデル、ビルド済み画面はこのソース移行に含めない。
+- 在庫補正を試す場合は、別に起動した局所Keycloak（`127.0.0.1:19580`）、OpenFGA、合成担当者のID対応表と、秘密情報を含む `--inventory-auth-config` JSONが必要。認証処理はこのbackendに同梱した `identity_registry.py` を読み、KeycloakのトークンとOpenFGA判定を業務APIで確認する。他の人役の顧客回答と出荷承認は自己申告の合成操作である。
+- 本人限定入口 `owner_entry.py` は、`apps/webhost/tailnet_access.py` の `TailnetViewPolicy` に依存する。既存のTailscale Serveがログインヘッダーを付与するloopback境界の背後でのみ使う。`TP_TAILNET_ORIGIN` と空でない `TP_TAILNET_ALLOWED_LOGINS` が必要。公開issuer、Keycloak転送先、ブラウザーの `/trial/` コールバックはこの試行のURLとポートに固定されているため、別originへ移す場合は認証設定と境界コードを再確認する。
+
+業務APIの起動形は次のとおり。`<別DB>` と `<非公開の認証設定>` は既存ファイルから別途指定し、ポートはrootが共有サービスとの重複を確認する。本人限定画面を使う場合は、画面を先に `trial/ui/dist` へビルドし、既存のKeycloak・OpenFGAとServeの設定を確認する。
+
+```sh
+PY=.artifacts/rq03-baseline-20261101/venv/bin/python
+ORDER_AGENT_MODEL_ID=qwen3:8b \
+ORDER_AGENT_BASE_URL=http://127.0.0.1:11434/v1 \
+ORDER_AGENT_ROUTE=direct \
+ORDER_AGENT_PROTOCOL=chat-completions \
+ORDER_AGENT_API_KEY=ollama-local-placeholder \
+"$PY" demos/order-exception-saas/trial/backend/server.py \
+  --single-agent --port <別ポート> --db <別DB> \
+  --dist demos/order-exception-saas/trial/ui/dist \
+  --inventory-auth-config <非公開の認証設定>
+```
+
+本人限定入口は業務APIとは別プロセスで、`OE02_BACKEND_PORT` を上記ポート、`OE02_ENTRY_PORT` を入口用の未使用loopbackポートに設定して `python3 demos/order-exception-saas/trial/owner_entry.py` を起動する。入口の `/trial/` を通した実ブラウザー操作には、固定されたTailnet HTTPS origin、Keycloakの公開issuer、Serveのルーティングが必要である。ソースのコピーとPython構文検査は、その起動や本人画面への到達を示さない。
+
+このデモの受注、在庫、契約、便、担当者は合成である。Agentが実モデルを呼ぶ場合でも、案の保存は資料照合を通った結果だけであり、顧客回答、出荷承認、引当、出荷指示は別の業務操作として扱う。保存runの読戻しは新しい推論ではない。
+
+実モデルが正常完了したrunでは、`AgentResponse.text`を`agent_runs.model_final_reply`へ保存し、GETの`modelFinalReply`で返す。このSDKプロパティはrun中のテキスト内容を集約する。列名とAPIキーは互換性のため維持するが、最後のassistant発話だけかは現行の保存証拠から判定できない。`draft.body`は業務APIが構造化案から作る別の文章である。旧run、時間切れ、資料更新で失敗したrun、固定試験の`modelFinalReply`は`null`。画面は保存テキストを記号のない本文に投影する前に「事実・契約判断は未検証」と示す。2026-11-09の局所実モデルrunは保存テキストに不足と契約の根拠外の断定があったため、業務判断には業務APIの状態と人の確認を使う。保存テキストと案文の違いは実行証拠（候補外の開発記録：`../../../docs/ai-platform-v38/oe02-final-reply-evidence-20261109-1005.json`）に残した。
