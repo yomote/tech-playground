@@ -1,0 +1,18 @@
+id: order-exception-saas-order18
+title: 合成受注SO-24018の通常便承諾と出荷判断
+status: exploring
+summary: Agentの二案と人の承諾・判断を同じ合成受注で追い、承諾なしの拒否と出荷指示の保存を確かめる。
+goal: 出荷例外をAgentに調べさせ、人がどこで介入するかを業務状態とともに評価する。
+questions:
+  - Agentの案は受注・在庫・便・契約の根拠に合うか
+  - 通常便の遅延と分納を別々に承諾しなければ出荷を止められるか
+  - 別担当の認証と承認後にだけ正しい出荷指示を保存するか
+tags: [sample-app, b2b, order-fulfillment, ai-platform, mui]
+stack: [python, react, mui, vite]
+findings:
+  - 2026-11-13、独立ソースを本人限定実Serveへ適用し、固定合成受注で局所実モデルの2 Toolから遅着承諾、別担当判断、出荷指示保存まで新試行を確認した。実顧客・実配送は未検証。
+references:
+  - title: 2026-11-13 11:05の本人限定実操作画面
+    url: https://omote-llm.tail47e89e.ts.net:12443/trial-order18/?run=order-run-39792c93015a40328fa2c39ae781a3b7
+createdAt: 2026-11-13
+updatedAt: 2026-11-13

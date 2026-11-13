@@ -1,0 +1,27 @@
+{
+  "cycle": "2026-11-13 13:05 JST",
+  "owner": "root",
+  "purpose": "固定合成SO-24018の依頼から出荷保存までを初見で追い、モデル返答と業務API保存案の同意欄名差へ直接進む",
+  "mode": "前回の局所実qwen3:8b保存runを、本人限定Serveの現行source/distで再解析。今回の新推論、mock推論、顧客回答、出荷更新は0",
+  "liveEntry": "https://omote-llm.tail47e89e.ts.net:12443/trial-order18/?run=order-run-39792c93015a40328fa2c39ae781a3b7",
+  "savedJourney": "前回のrunは受注・在庫と便・契約の2 Toolを読み、通常0円と特急78,000円を保存。合成顧客役と別認証Bob役の判断後、受注第16版と出荷指示2件を保存済み",
+  "newInteraction": "390px初画面の「注意：返答と保存案の欄名差」を押すと警告が上端16pxに移り焦点が当たる。「モデル原文を見る」で元の返答へ移り焦点が当たる",
+  "browserEvidence": ".artifacts/oe02-firstfold-field-link-20261113-1305/browser-readback.json",
+  "screenshots": [
+    ".artifacts/oe02-firstfold-field-link-20261113-1305/bad-run-firstfold-390.png",
+    ".artifacts/oe02-firstfold-field-link-20261113-1305/bad-run-warning-390.png"
+  ],
+  "sameConditionBoundary": "正しい欄名の別保存runは警告リンク0・警告0。両run GETのみ、JavaScript例外0、文書幅390px。閲覧前後の全16業務表SHA一致、受注shipment_instructed・第16版を維持",
+  "browserRoute": "Playwrightは同一ノードの一時ループバック代理から既存のowner boundaryへ接続。Tailnet Serve設定には/trial-order18→127.0.0.1:5486が残る。今回の外部Tailnetブラウザと本人端末の直接開封は未確認",
+  "source": {
+    "branch": "codex/oe02-order18-source-20261113",
+    "pullRequest": "https://github.com/yomote/tech-playground/pull/15",
+    "headAfterUI": "5dbecfbad8598c04dabb0964ef14827dbd22eca5",
+    "mainBlob": "eb8a691e675651b811167410389f3a4bd84a0ce7",
+    "cssBlob": "52fff3dd032e4eafb5f205d96ac545c32861375e"
+  },
+  "independentReview": "別主体は初画面リンク・警告と原文への焦点移動、正常runで表示なし、GETのみと業務状態不変を確認し、保存run再解析の初見導線だけ限定採用可。自然文全文と案別欄名対応は未判定",
+  "officialBasis": "https://html.spec.whatwg.org/dev/browsing-the-web.html#scrolling-to-a-fragment",
+  "staticDashboard": "本人限定Sitesは第250版の旧11:05内容。今回の書込資格もcodex_authでtokenなし、現実行環境のGitに対応する資格ヘルパーがなく未配備",
+  "releaseAcceptance": "正式R1〜R4は変更なし"
+}
