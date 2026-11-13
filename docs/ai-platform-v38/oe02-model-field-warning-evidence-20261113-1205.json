@@ -1,0 +1,35 @@
+{
+  "cycle": "2026-11-13 12:05 JST",
+  "owner": "root",
+  "purpose": "固定合成SO-24018の保存済み実モデル返答と業務APIが保存した二案の同意欄名の差を、本人限定の実操作画面で確認できるようにする",
+  "mode": "前回の局所実qwen3:8b runを本人限定の実Tailnet Serveで再解析。今回は新しいモデル推論、人役操作、業務更新を行っていない。mockではない。",
+  "input": "Agentの返答と保存案が違う箇所を見せて",
+  "entry": "https://omote-llm.tail47e89e.ts.net:12443/trial-order18/?run=order-run-39792c93015a40328fa2c39ae781a3b7",
+  "observed": [
+    "前回の実モデルrunは受注・在庫と便・契約の2 Toolを読み、通常0円と特急78,000円の二案を提出。合成顧客と別認証Bobの操作後に受注第16版・出荷指示2件となった。今回はその保存結果を読み直した。",
+    "前回runのモデル原文のリストには acceptedExpress があるが、業務API保存二案の customerDecisionFields は acceptedSplit、acceptedLateDelivery、acceptedExpressCost。実Serveの390px画面で差を警告し、原文を見るボタンで原文へ焦点移動した。",
+    "正しい欄名リストを含む別の保存済み実モデルrunでは警告が出なかった。両runの画面はHTTP200、文書幅390px、画面例外0。閲覧前後の全16業務表SHAは一致し、受注は第16版・shipment_instructedのまま。",
+    "警告は初画面の下にあり、スクロール後に読める。自由文は未送信で、顧客回答と出荷判断の正本は業務APIにある。"
+  ],
+  "review": "別主体oe02_independent_review_1205がソース・実Serveの390px読戻し・全16表SHAを確認し、保存済み実モデルrunの欄名リスト再解析に限り採用可と判断。",
+  "source": {
+    "draftPr": "https://github.com/yomote/tech-playground/pull/15",
+    "file": "demos/order-exception-saas-order18/ui/src/main.tsx",
+    "commit": "caac49af0ba3e05b8dc916c12f7d5d6df7c23916",
+    "localTypecheck": "pass",
+    "localBuild": "pass",
+    "ci": "queued_at_source_update"
+  },
+  "rawEvidence": [
+    ".artifacts/oe02-model-field-warning-20261113-1205/browser-readback.json",
+    ".artifacts/oe02-model-field-warning-20261113-1205/bad-run-first-fold-390.png",
+    ".artifacts/oe02-model-field-warning-20261113-1205/bad-run-warning-390.png",
+    ".artifacts/oe02-model-field-warning-20261113-1205/bad-run-reply-390.png",
+    "docs/ai-platform-v38/oe02-deployed-source-run-evidence-20261113-1105.json"
+  ],
+  "limitations": [
+    "原文中の引用符で囲まれた accepted... の欄名リストだけを照合する。自然文の言い換え、否定、全文の正確性は未判定。",
+    "本人端末初見、実顧客への送達、実社員・実資料・実配送、自由入力、共有SO-24017、Azure、正式R1〜R4は未受入。"
+  ],
+  "nextAcceptance": "rootがPR #15の今回差分とCI・証拠を実人コードレビューへ渡す。予定日未定。"
+}
