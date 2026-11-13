@@ -1,0 +1,7 @@
+# Direct imports used by this isolated synthetic trial, fixed on 2026-11-09.
+agent-framework-core==1.19.0
+agent-framework-openai==1.14.4
+agent-framework-orchestrations==1.2.0
+openai==3.28.0
+openfga-sdk==0.10.5
+PyJWT==2.7.0
