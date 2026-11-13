@@ -225,13 +225,27 @@ body {
   background: #edf3f7;
 }
 
+.journey-nav-links .journey-warning-link {
+  border-color: #b9822b;
+  background: #fff7e8;
+}
+
+.journey-nav-links .journey-warning-link:hover {
+  background: #ffefd2;
+}
+
 .journey-nav-links a:focus-visible,
+.firstfold-result[id="model-consent-field-mismatch"]:focus-visible,
 .content-panel[id^="journey-"]:focus-visible {
   outline: 3px solid #276f57;
   outline-offset: 3px;
 }
 
 .content-panel[id^="journey-"] {
+  scroll-margin-top: 16px;
+}
+
+.firstfold-result[id="model-consent-field-mismatch"] {
   scroll-margin-top: 16px;
 }
 
