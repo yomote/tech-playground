@@ -1,0 +1,53 @@
+{
+  "cycle": "2026-11-13 11:05 JST",
+  "owner": "root",
+  "purpose": "合成受注SO-24018の不足15箱について、通常便の遅着を明示承諾し、別担当の判断後に保存結果まで追う",
+  "candidateDecision": {
+    "selected": "OE-02: 受注・在庫と便・契約の調査、二案、人の回答と判断、出荷指示の保存を同じ画面とDBで示せる",
+    "alternatives": [
+      "RQ-03: 原資料から見積発行までを示せるが、同版の実担当と原資料が未確認",
+      "Blue/Red: 経路調査と修正案を示せるが、配備影響の人の判断が未確認"
+    ]
+  },
+  "environment": {
+    "entry": "https://omote-llm.tail47e89e.ts.net:12443/trial-order18/?run=order-run-39792c93015a40328fa2c39ae781a3b7",
+    "mode": "本人限定の実Tailnet Serveを同一ノードの390px Chromeから操作。局所実qwen3:8bを実行。受注・在庫・便・契約・顧客・担当者は固定合成。合成顧客操作はスクリプト、Bob役は別ブラウザの実Keycloakログインと隔離OpenFGA判定。Azureではない",
+    "source": "demos/order-exception-saas-order18/; GitHub draft PR #15 https://github.com/yomote/tech-playground/pull/15, head 85f2222684a6434eb30f99a16092dda3a38441b6",
+    "runId": "order-run-39792c93015a40328fa2c39ae781a3b7",
+    "trialId": "trial-b30e8a8bd5bf4e8f9a4fda867779671b"
+  },
+  "input": "合成受注SO-24018の40箱で倉庫Aが15箱不足しています。希望納期11月16日10時より倉庫Bの通常便は遅れるため、在庫・便・契約を調べ、間に合う特急便と比較してください。通常便の納期変更は未承諾として扱い、顧客へ確認する未送信案を示してください。顧客回答と出荷承認は待ってください。",
+  "observed": [
+    "旧試行の第13版・出荷指示2件を履歴へ保存し、前回runのAPIと画面GET200を保って新試行を開始した",
+    "Agentはread_order_inventoryとread_carriers_contractを実際に呼び、Tool応答のSHAを一致確認した。資料参照の提出は初め2回拒否され、3回目に有効案を保存した",
+    "通常便0円（A25箱11/16 10:00、B15箱11/17 10:00）と特急便78,000円の二案を保存。実モデルAPI往復は約99.43秒で、純粋なモデル計算時間ではない",
+    "Agent完了後は受注第14版・顧客回答0・出荷指示0の人待ち。通常便の遅着承諾欠落はHTTP422 late_delivery_consent_requiredで、全16業務表のSHAが前後一致した",
+    "合成顧客役が分納承諾と11/17 10:00着の遅着承諾を別々に保存し、第15版・出荷指示0になった",
+    "別ブラウザのBob役が実Keycloakログインと隔離OpenFGA判定を通り判断を保存。第16版・引当2件・出荷指示2件・在庫A0/B5、元希望納期11/16 10:00をAPIとSQLiteで確認した",
+    "390px画面で依頼、AgentとTool、顧客回答、出荷判断、保存結果の5導線を表示。新旧runのAPIと旧run画面はGET200。画面例外0、横幅390px"
+  ],
+  "limitations": [
+    "Agent最終自由文に存在しないacceptedExpress風の欄名があり、顧客への送信文としては未採用。業務APIの構造化案と保存状態を判断根拠にした",
+    "顧客とBobは合成人役。実顧客への連絡、実社員の判断、物理出荷は行っていない。本人端末からの初見開封も未確認",
+    "固定合成SO-24018だけを確認。自由入力、共有SO-24017、実資料・実在庫・実配送、Azureと正式R1〜R4は未受入",
+    "共有PRのCIは修正後成功だが、release assessmentはneeds-review。人のコードレビューとmergeは未完"
+  ],
+  "review": {
+    "businessRun": "別主体acceptance_audit_1105が画面、実HTTP、SQLite、ソースSHAを照合。本人限定の固定合成SO-24018実走だけ限定採用可",
+    "source": "別主体sharing_path_1105がPR #15の28ファイルをローカルcb7a8e9とblob SHA照合し、秘密・DB・認証設定なしを確認。登録CIとPortal CIは成功、Release assessment: needs-review",
+    "officialSpecifications": [
+      "https://learn.microsoft.com/en-us/agent-framework/agents/tools/function-tools",
+      "https://openfga.dev/docs/getting-started/perform-check",
+      "https://www.keycloak.org/securing-apps/javascript-adapter",
+      "https://tailscale.com/docs/reference/tailscale-cli/serve"
+    ]
+  },
+  "rawEvidence": [
+    ".artifacts/oe02-deployed-source-run-20261113-1105/start-deployed-evidence.json",
+    ".artifacts/oe02-deployed-source-run-20261113-1105/finish-deployed-evidence.json",
+    ".artifacts/oe02-deployed-source-run-20261113-1105/new-run-readback.json",
+    ".artifacts/oe02-deployed-source-run-20261113-1105/new-run-first-fold-390.png",
+    ".artifacts/oe02-deployed-source-run-20261113-1105/03-deployed-agent-pending-390.png"
+  ],
+  "nextAcceptance": "rootがPR #15の証拠参照をレビュアーが開ける形に整理し、人のコードレビューと本人端末初見評価を確認する。予定日未定。正式R1〜R4は別受入"
+}
