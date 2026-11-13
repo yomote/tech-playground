@@ -258,6 +258,20 @@ function hasServerDraft(run: Run | null): run is Run & { draft: NonNullable<Run[
   return draft.plan.proposals.every(proposal => !proposal.runId || proposal.runId === run.id);
 }
 
+function consentFieldMismatch(run: Run | null) {
+  if (!hasServerDraft(run) || run.status !== 'completed' || !run.modelFinalReply) return null;
+  const savedFields = [...new Set((run.draft.plan?.proposals ?? [])
+    .flatMap(proposal => proposal.customerDecisionFields ?? [])
+    .filter(field => /^accepted[A-Z][A-Za-z0-9]*$/.test(field)))];
+  if (!savedFields.length) return null;
+  // Only inspect field names inside literal lists. Other prose is not evaluated here.
+  const lists = run.modelFinalReply.match(/\[\s*['"]accepted[A-Z][A-Za-z0-9]*['"](?:\s*,\s*['"]accepted[A-Z][A-Za-z0-9]*['"])*\s*\]/g) ?? [];
+  const modelFields = [...new Set(lists.flatMap(list =>
+    [...list.matchAll(/['"](accepted[A-Z][A-Za-z0-9]*)['"]/g)].map(match => match[1])))];
+  const unknown = modelFields.filter(field => !savedFields.includes(field));
+  return unknown.length ? { unknown, savedFields } : null;
+}
+
 function savedStockContrast(run: Run | null) {
   if (!hasServerDraft(run) || run.status !== 'completed' || !run.modelFinalReply) return null;
   const sourceB = run.sourceSnapshot?.inventory?.find(item => item.warehouseId === 'warehouse-b')?.available;
@@ -886,6 +900,7 @@ function App({ authInitError }: { authInitError: string }) {
   const draftReady = readableDraft && run.status === 'draft_ready';
   const proposals = readableDraft ? run.draft.plan?.proposals ?? [] : [];
   const stockContrast = savedStockContrast(run);
+  const fieldMismatch = consentFieldMismatch(run);
   const normalDateWarning = currentRun && !olderRun
     ? normalDeliveryDateMismatch(run, detail?.order.dueAt) : null;
   const inventoryCorrectionStoppedRun = Boolean(currentRun && sourceChangedSinceRead &&
@@ -1091,6 +1106,21 @@ function App({ authInitError }: { authInitError: string }) {
         <Button size="small" variant="outlined" sx={{ mt: 1.5 }}
           onClick={() => document.querySelector('[data-testid="saved-options"]')?.scrollIntoView({ behavior: 'smooth' })}>
           保存案の条件を見る
+        </Button>
+      </Alert>}
+      {fieldMismatch && <Alert severity="warning" className="firstfold-result"
+        data-testid="model-consent-field-mismatch" role="status">
+        <Typography component="h2" className="firstfold-result-title">モデル文の同意欄名を保存案と照合</Typography>
+        <Typography variant="body2">モデル原文の欄名一覧に {fieldMismatch.unknown.join('、')} が出ています。
+          このrunで業務APIが保存した二案の同意項目は {fieldMismatch.savedFields.join('、')} で、この欄名は含みません。
+          自由文は未送信です。顧客回答と出荷判断は業務APIの保存結果を確認してください。</Typography>
+        <Button size="small" variant="outlined" sx={{ mt: 1.5 }}
+          onClick={() => {
+            const target = document.querySelector<HTMLElement>('[data-testid="model-final-reply"]');
+            target?.scrollIntoView({ behavior: 'smooth' });
+            target?.focus();
+          }}>
+          モデル原文を見る
         </Button>
       </Alert>}
       {detail?.sourceReviewRequest && <Alert severity={instructed ? 'success' : positiveReviewSaved ? 'info' : 'warning'}
