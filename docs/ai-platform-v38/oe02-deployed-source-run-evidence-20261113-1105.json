@@ -12,7 +12,7 @@
   "environment": {
     "entry": "https://omote-llm.tail47e89e.ts.net:12443/trial-order18/?run=order-run-39792c93015a40328fa2c39ae781a3b7",
     "mode": "本人限定の実Tailnet Serveを同一ノードの390px Chromeから操作。局所実qwen3:8bを実行。受注・在庫・便・契約・顧客・担当者は固定合成。合成顧客操作はスクリプト、Bob役は別ブラウザの実Keycloakログインと隔離OpenFGA判定。Azureではない",
-    "source": "demos/order-exception-saas-order18/; GitHub draft PR #15 https://github.com/yomote/tech-playground/pull/15, head 85f2222684a6434eb30f99a16092dda3a38441b6",
+    "source": "demos/order-exception-saas-order18/; GitHub draft PR #15 https://github.com/yomote/tech-playground/pull/15. Source-code revision 85f2222684a6434eb30f99a16092dda3a38441b6; PR head may also include this evidence index.",
     "runId": "order-run-39792c93015a40328fa2c39ae781a3b7",
     "trialId": "trial-b30e8a8bd5bf4e8f9a4fda867779671b"
   },
@@ -49,5 +49,5 @@
     ".artifacts/oe02-deployed-source-run-20261113-1105/new-run-first-fold-390.png",
     ".artifacts/oe02-deployed-source-run-20261113-1105/03-deployed-agent-pending-390.png"
   ],
-  "nextAcceptance": "rootがPR #15の証拠参照をレビュアーが開ける形に整理し、人のコードレビューと本人端末初見評価を確認する。予定日未定。正式R1〜R4は別受入"
+  "nextAcceptance": "rootがPR #15の登録CIと実行証拠を添えて実人コードレビューへ渡す。本人端末初見評価は別条件。予定日未定。正式R1〜R4は別受入"
 }
