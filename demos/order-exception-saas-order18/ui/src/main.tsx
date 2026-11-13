@@ -1031,6 +1031,8 @@ function App({ authInitError }: { authInitError: string }) {
           {showContractSection && <a href="#journey-contract">4 契約確認</a>}
           <a href="#journey-approval">{showContractSection ? 5 : 4} 出荷判断</a>
           <a href="#journey-result">{showContractSection ? 6 : 5} 保存結果</a>
+          {fieldMismatch && <a className="journey-warning-link" href="#model-consent-field-mismatch"
+            data-testid="journey-field-mismatch-link">注意：返答と保存案の欄名差</a>}
         </Box>
       </Paper>}
       {allowNewTrialFromScreen && instructed && !readOnlyRun && !readbackOnly && <Alert severity="info" className="firstfold-result"
@@ -1109,6 +1111,7 @@ function App({ authInitError }: { authInitError: string }) {
         </Button>
       </Alert>}
       {fieldMismatch && <Alert severity="warning" className="firstfold-result"
+        id="model-consent-field-mismatch" tabIndex={-1}
         data-testid="model-consent-field-mismatch" role="status">
         <Typography component="h2" className="firstfold-result-title">モデル文の同意欄名を保存案と照合</Typography>
         <Typography variant="body2">モデル原文の欄名一覧に {fieldMismatch.unknown.join('、')} が出ています。
