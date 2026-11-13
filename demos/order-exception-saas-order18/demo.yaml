@@ -1,11 +1,6 @@
 id: order-exception-saas-order18
 title: 合成受注SO-24018の通常便承諾と出荷判断
-kind: sample-app
 status: exploring
-audience: 卸売会社の受注担当者・出荷責任者、Agent開発者
-scope: 固定合成受注の不足15箱を調べ、通常便の遅延承諾と別担当の出荷判断を経て保存結果を確認する。
-implementation: 局所実モデルの2 Tool、SQLite業務API、React/MUI画面、合成顧客の自己申告、局所Keycloakと隔離OpenFGAで認証した合成Bob役を用いる。本人限定Tailnet Serveは別途構成する。
-relatedDemos: []
 summary: Agentの二案と人の承諾・判断を同じ合成受注で追い、承諾なしの拒否と出荷指示の保存を確かめる。
 goal: 出荷例外をAgentに調べさせ、人がどこで介入するかを業務状態とともに評価する。
 questions:
@@ -15,9 +10,9 @@ questions:
 tags: [sample-app, b2b, order-fulfillment, ai-platform, mui]
 stack: [python, react, mui, vite]
 findings:
-  - 2026-11-13、SO-24018の稼働候補から固定合成資料と実行コードを独立したソースへ移した。新ソースからの実走と配備切替の採否は別途記録する。
+  - 2026-11-13、独立ソースを本人限定実Serveへ適用し、固定合成受注で局所実モデルの2 Toolから遅着承諾、別担当判断、出荷指示保存まで新試行を確認した。実顧客・実配送は未検証。
 references:
-  - title: 2026-11-13 09:05の現行本人限定実操作画面
-    url: https://omote-llm.tail47e89e.ts.net:12443/trial-order18/?run=order-run-7695260d6a524fbd85df20731cf5fc1c
+  - title: 2026-11-13 11:05の本人限定実操作画面
+    url: https://omote-llm.tail47e89e.ts.net:12443/trial-order18/?run=order-run-39792c93015a40328fa2c39ae781a3b7
 createdAt: 2026-11-13
 updatedAt: 2026-11-13
