@@ -1,0 +1,784 @@
+name: Goose security agent
+
+# workflow_run executes from default-branch code. Never check out the triggering
+# workflow's branch or give its artifacts repository write credentials.
+on:
+  workflow_run:
+    workflows: ['CVE watch (OSV)']
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: goose-security-agent-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  select:
+    if: >-
+      vars.BLUE_SECURITY_ENABLED == 'true' &&
+      github.repository == 'yomote/tech-playground' &&
+      github.event.workflow_run.name == 'CVE watch (OSV)' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'schedule' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      candidate: ${{ steps.choose.outputs.candidate }}
+      case_sha256: ${{ steps.choose.outputs.case_sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: cve-watch-${{ github.event.workflow_run.id }}
+          path: /tmp/tech-playground-blue-${{ github.run_id }}/scan
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Fetch complete live alert and open PR lists
+        shell: bash
+        env:
+          READ_TOKEN: ${{ github.token }}
+          ALERTS_TOKEN: ${{ secrets.BLUE_ALERTS_TOKEN }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPOSITORY: ${{ github.repository }}
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, urllib.parse, urllib.request
+          from pathlib import Path
+          repo = os.environ['REPOSITORY']
+          read_token, alerts_token = os.environ['READ_TOKEN'], os.environ['ALERTS_TOKEN']
+          root = Path(os.environ['CASE_DIR'])
+          root.mkdir(mode=0o700, parents=True, exist_ok=True)
+          if repo != 'yomote/tech-playground' or not read_token or not alerts_token:
+              raise SystemExit('repository or read-only alert credential unavailable')
+          base = f'https://api.github.com/repos/{repo}'
+          def get(url, token):
+              request = urllib.request.Request(url, headers={
+                  'Authorization': f'Bearer {token}',
+                  'Accept': 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+              })
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  if response.status != 200:
+                      raise RuntimeError(f'GitHub API status {response.status}')
+                  raw = response.read(24 * 1024 * 1024 + 1)
+                  if len(raw) > 24 * 1024 * 1024:
+                      raise RuntimeError('GitHub API response too large')
+                  return json.loads(raw), response.headers.get('Link', '')
+          branch, _ = get(f'{base}/branches/main', read_token)
+          if branch['commit']['sha'] != os.environ['SOURCE_SHA']:
+              raise RuntimeError('scheduled scan is not current main')
+          def all_pages(path, token):
+              url, rows = f'{base}/{path}?state=open&per_page=100', []
+              for _ in range(100):
+                  page, links = get(url, token)
+                  if not isinstance(page, list):
+                      raise RuntimeError('GitHub API list incomplete')
+                  rows.extend(page)
+                  if len(rows) > 5000:
+                      raise RuntimeError('GitHub API list exceeds safety limit')
+                  next_links = re.findall(r'<([^>]+)>;\s*rel="next"', links)
+                  if not next_links:
+                      return rows
+                  url = next_links[0]
+                  parsed = urllib.parse.urlsplit(url)
+                  if parsed.scheme != 'https' or parsed.netloc != 'api.github.com' or parsed.path != f'/repos/{repo}/{path}':
+                      raise RuntimeError('unexpected pagination URL')
+              raise RuntimeError('GitHub API pagination incomplete')
+          alerts = all_pages('dependabot/alerts', alerts_token)
+          pulls = all_pages('pulls', read_token)
+          for item in alerts:
+              if not isinstance(item, dict) or item.get('state') != 'open':
+                  raise RuntimeError('unexpected Dependabot alert state')
+          normalized = []
+          for item in pulls:
+              if not isinstance(item, dict) or item.get('state') != 'open' or not isinstance(item.get('head'), dict):
+                  raise RuntimeError('unexpected open PR shape')
+              normalized.append({
+                  'number': item['number'], 'state': item['state'],
+                  'title': item.get('title'), 'body': item.get('body'),
+                  'head_ref': item['head'].get('ref'),
+              })
+          (root / 'dependabot-alerts.json').write_text(json.dumps({
+              'repository': repo, 'complete': True, 'alerts': alerts,
+          }))
+          (root / 'open-prs.json').write_text(json.dumps({
+              'repository': repo, 'complete': True, 'pulls': normalized,
+          }))
+          print(f'Complete intake: {len(alerts)} open alerts, {len(normalized)} open PRs')
+          PY
+      - name: Select one matching, fixable advisory
+        id: choose
+        shell: bash
+        env:
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          set +e
+          python3 demos/blue-team-agent/security_loop.py select \
+            --repo "$GITHUB_WORKSPACE" --repository "$GITHUB_REPOSITORY" \
+            --sarif "$CASE_DIR/scan/results.sarif" \
+            --evidence "$CASE_DIR/scan/evidence.json" \
+            --dependabot-alerts "$CASE_DIR/dependabot-alerts.json" \
+            --open-prs "$CASE_DIR/open-prs.json" \
+            --out "$CASE_DIR/case.json"
+          result=$?
+          set -e
+          if [[ "$result" == 0 ]]; then
+            echo 'candidate=true' >> "$GITHUB_OUTPUT"
+            case_sha256=$(sha256sum "$CASE_DIR/case.json" | cut -d' ' -f1)
+            echo "case_sha256=$case_sha256" >> "$GITHUB_OUTPUT"
+          elif [[ "$result" == 2 ]]; then
+            CASE_DIR="$CASE_DIR" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          case = json.loads((Path(os.environ['CASE_DIR']) / 'case.json').read_text())
+          if case.get('status') != 'blocked' or case.get('reason') not in {
+              'no_findings', 'no_scoped_fixable_case', 'no_fixed_version_or_unique_case',
+              'no_published_fixed_version',
+          }:
+              raise SystemExit(f"selection gate failed: {case.get('reason')}")
+          print(f"No eligible case: {case['reason']}")
+          PY
+            echo 'candidate=false' >> "$GITHUB_OUTPUT"
+          else
+            exit "$result"
+          fi
+      - if: steps.choose.outputs.candidate == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: blue-selected-${{ github.run_id }}
+          path: /tmp/tech-playground-blue-${{ github.run_id }}/case.json
+          retention-days: 14
+          if-no-files-found: error
+
+  candidate:
+    needs: select
+    if: needs.select.outputs.candidate == 'true'
+    # This must be an ephemeral, egress-restricted runner with local Ollama.
+    # No GitHub write secret is exposed to Goose or the dependency install.
+    runs-on: [self-hosted, linux, x64, blue-ephemeral-gpu]
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: blue-selected-${{ github.run_id }}
+          path: /tmp/tech-playground-blue-${{ github.run_id }}
+      - name: Download SHA-pinned Goose and OSV-Scanner
+        shell: bash
+        env:
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$CASE_DIR/bin"
+          curl -fsSL --retry 3 --max-time 120 \
+            https://github.com/aaif-goose/goose/releases/download/v1.54.0/goose-x86_64-unknown-linux-gnu.tar.bz2 \
+            -o "$CASE_DIR/goose.tar.bz2"
+          printf '%s  %s\n' \
+            bf01cb6359f7a2b1acb54ca4827e1d059b18aabb3d2b75202e21066cfd3a3396 \
+            "$CASE_DIR/goose.tar.bz2" | sha256sum --check --status
+          python3 - "$CASE_DIR/goose.tar.bz2" "$CASE_DIR/bin/goose" <<'PY'
+          import sys, tarfile
+          from pathlib import Path
+          with tarfile.open(sys.argv[1], 'r:bz2') as archive:
+              member = archive.getmember('./goose')
+              if not member.isfile():
+                  raise SystemExit('Goose archive member is not a file')
+              source = archive.extractfile(member)
+              if source is None:
+                  raise SystemExit('Goose archive member missing')
+              Path(sys.argv[2]).write_bytes(source.read())
+          PY
+          printf '%s  %s\n' \
+            2419b124b0b1eb4e02b19cbc2373a91e8927010c8ed2902680c7a2864a49785f \
+            "$CASE_DIR/bin/goose" | sha256sum --check --status
+          chmod 0755 "$CASE_DIR/bin/goose"
+          curl -fsSL --retry 3 --max-time 90 \
+            https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64 \
+            -o "$CASE_DIR/bin/osv-scanner"
+          printf '%s  %s\n' \
+            160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b \
+            "$CASE_DIR/bin/osv-scanner" | sha256sum --check --status
+          chmod 0755 "$CASE_DIR/bin/osv-scanner"
+      - name: Require both local Qwen models
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 10 http://127.0.0.1:11434/api/tags | python3 -c \
+            'import json,sys; names={m.get("name") for m in json.load(sys.stdin).get("models",[])}; assert {"qwen3:8b","qwen3.5:35b"}.issubset(names), "local proposal/review models unavailable"'
+      - name: Propose and verify one patch
+        shell: bash
+        env:
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+          GOOSE_PROVIDER: ollama
+          GOOSE_MODEL: qwen3:8b
+          OLLAMA_HOST: http://127.0.0.1:11434
+          NO_PROXY: 127.0.0.1,localhost
+        run: |
+          set -euo pipefail
+          python3 demos/blue-team-agent/security_loop.py propose \
+            --repo "$GITHUB_WORKSPACE" --case "$CASE_DIR/case.json" \
+            --goose "$CASE_DIR/bin/goose" --timeout 600 \
+            --out "$CASE_DIR/proposal.json"
+          python3 demos/blue-team-agent/security_loop.py verify \
+            --repo "$GITHUB_WORKSPACE" --case "$CASE_DIR/case.json" \
+            --proposal "$CASE_DIR/proposal.json" \
+            --scanner "$CASE_DIR/bin/osv-scanner" --timeout 300 \
+            --check '["pnpm","install","--frozen-lockfile"]' \
+            --check '["pnpm","build"]' --check '["pnpm","test"]' \
+            --out "$CASE_DIR/verification.json"
+      - name: Independently review with a different local model
+        shell: bash
+        env:
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+          GOOSE_PROVIDER: ollama
+          GOOSE_MODEL: qwen3.5:35b
+          OLLAMA_HOST: http://127.0.0.1:11434
+          NO_PROXY: 127.0.0.1,localhost
+        run: |
+          set -euo pipefail
+          python3 demos/blue-team-agent/security_loop.py review \
+            --proposal "$CASE_DIR/proposal.json" \
+            --verification "$CASE_DIR/verification.json" \
+            --goose "$CASE_DIR/bin/goose" --timeout 300 \
+            --out "$CASE_DIR/review.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: blue-reviewed-${{ github.run_id }}
+          path: |
+            /tmp/tech-playground-blue-${{ github.run_id }}/case.json
+            /tmp/tech-playground-blue-${{ github.run_id }}/proposal.json
+            /tmp/tech-playground-blue-${{ github.run_id }}/proposal.patch
+            /tmp/tech-playground-blue-${{ github.run_id }}/verification.json
+            /tmp/tech-playground-blue-${{ github.run_id }}/review.json
+          retention-days: 14
+          if-no-files-found: error
+
+  publish:
+    needs: [select, candidate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      pr: ${{ steps.open.outputs.pr }}
+      head: ${{ steps.open.outputs.head }}
+      bot_login: ${{ steps.open.outputs.bot_login }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: blue-reviewed-${{ github.run_id }}
+          path: /tmp/tech-playground-blue-${{ github.run_id }}
+      - name: Verify reviewed bytes, current main, and patch scope
+        shell: bash
+        env:
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+          READ_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          CASE_SHA256: ${{ needs.select.outputs.case_sha256 }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess, urllib.request
+          from pathlib import Path
+          root = Path(os.environ['CASE_DIR'])
+          load = lambda name: json.loads((root / name).read_text())
+          sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+          case, proposal, verified, review = map(load, (
+              'case.json', 'proposal.json', 'verification.json', 'review.json'))
+          if not re.fullmatch(r'[0-9a-f]{64}', os.environ.get('CASE_SHA256', '')) or sha(root / 'case.json') != os.environ['CASE_SHA256']:
+              raise SystemExit('selected case differs from GitHub-hosted preflight')
+          patch = root / 'proposal.patch'
+          required = ((case, 'select', 'selected'), (proposal, 'propose', 'proposed'),
+                      (verified, 'verify', 'verified'), (review, 'review', 'reviewed'))
+          if any(obj.get('stage') != stage or obj.get('status') != status for obj, stage, status in required):
+              raise SystemExit('incomplete candidate stage')
+          ids = {obj.get('caseId') for obj in (case, proposal, verified, review)}
+          bases = {obj.get('baseSha') for obj in (case, proposal, verified, review)}
+          if len(ids) != 1 or len(bases) != 1 or bases != {os.environ['SOURCE_SHA']}:
+              raise SystemExit('case or source commit changed')
+          if (proposal.get('caseSha256') != sha(root / 'case.json') or
+              verified.get('proposalSha256') != sha(root / 'proposal.json') or
+              review.get('proposalSha256') != sha(root / 'proposal.json') or
+              review.get('verificationSha256') != sha(root / 'verification.json')):
+              raise SystemExit('review evidence chain changed')
+          if (proposal.get('patchPath') != str(patch) or not patch.is_file() or
+              len(patch.read_bytes()) > 128 * 1024 or
+              len({proposal.get('patchSha256'), verified.get('patchSha256'),
+                   review.get('patchSha256'), sha(patch)}) != 1):
+              raise SystemExit('reviewed patch bytes changed')
+          if (review.get('reviewer', {}).get('verdict') != 'APPROVE' or
+              verified.get('rescan', {}).get('targetFindingRows') != 0 or
+              not verified.get('checks') or
+              any(item.get('exitCode') != 0 or item.get('timedOut') for item in verified['checks'])):
+              raise SystemExit('review or verification did not pass')
+          paths = proposal.get('changedPaths')
+          if not isinstance(paths, list) or not paths or not set(paths).issubset(set(case.get('allowedPaths', []))):
+              raise SystemExit('patch exceeds case scope')
+          token = os.environ['READ_TOKEN']
+          def get(path):
+              request = urllib.request.Request(f'https://api.github.com/{path}', headers={
+                  'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          repo = 'yomote/tech-playground'
+          current = get(f'repos/{repo}/branches/main')['commit']['sha']
+          if current != case['baseSha']:
+              raise SystemExit('main advanced before publishing')
+          if subprocess.check_output(['git', 'status', '--porcelain']):
+              raise SystemExit('publish checkout is dirty')
+          if subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip() != current:
+              raise SystemExit('publish checkout is not scanned main')
+          data = patch.read_bytes()
+          subprocess.run(['git', 'apply', '--check', '-'], input=data, check=True)
+          subprocess.run(['git', 'apply', '-'], input=data, check=True)
+          actual = subprocess.check_output(['git', 'diff', '--binary', 'HEAD'])
+          changed = subprocess.check_output(['git', 'diff', '--name-only', 'HEAD']).decode().splitlines()
+          if hashlib.sha256(actual).hexdigest() != sha(patch) or changed != paths:
+              raise SystemExit('applied bytes or paths differ from review')
+          manifest = Path('.blue-team/security-case.json')
+          manifest.parent.mkdir(exist_ok=True)
+          manifest_data = dict(case)
+          manifest_data.update({
+              'patchSha256': sha(patch), 'changedPaths': paths,
+              'reviewEvidenceSha256': sha(root / 'review.json'),
+          })
+          manifest.write_text(json.dumps(manifest_data, indent=2) + '\n')
+          (root / 'pr-body.md').write_text(
+              f"Automated dependency fix for {case['advisory']} ({case['packageName']}).\n\n"
+              f"Case: `{case['caseId']}`. Source: scheduled OSV run {os.environ['SOURCE_RUN_ID']}.\n"
+              f"Pinned OSV rescan removed the selected advisory; focused build/test and separate Goose review passed.\n"
+              f"Reviewed patch SHA-256: `{sha(patch)}`.\n\n"
+              'The formal GitHub review, required CI, and active main ruleset must pass before auto-merge.\n')
+          if not re.fullmatch(r'BT-[0-9a-f]{16}', case['caseId']):
+              raise SystemExit('invalid case ID for branch')
+          (root / 'branch.txt').write_text('bot/security-' + case['caseId'].lower())
+          print('Reviewed patch and manifest are ready for a draft PR')
+          PY
+      - name: Publish exact patch as a draft PR with bot identity
+        id: open
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          command -v gh
+          bot_login=$(gh api user --jq .login)
+          test -n "$bot_login"
+          main_sha=$(gh api repos/yomote/tech-playground/branches/main --jq .commit.sha)
+          test "$main_sha" = "$(git rev-parse HEAD)"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" > "$CASE_DIR/live-prs.json"
+          CASE_DIR="$CASE_DIR" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['CASE_DIR'])
+          case = json.loads((root / 'case.json').read_text())
+          pages = json.loads((root / 'live-prs.json').read_text())
+          if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+              raise SystemExit('open PR pagination incomplete')
+          tokens = {str(x).lower() for x in [case['caseId'], *case['aliases']]}
+          for pr in (pr for page in pages for pr in page):
+              if pr.get('state') != 'open' or not isinstance(pr.get('head'), dict):
+                  raise SystemExit('unexpected open PR response')
+              text = '\n'.join(str(x or '') for x in (pr.get('title'), pr.get('body'), pr['head'].get('ref'))).lower()
+              if any(token in text for token in tokens):
+                  raise SystemExit('another open PR already covers this advisory')
+          PY
+          branch=$(cat "$CASE_DIR/branch.txt")
+          git switch -c "$branch"
+          git add -A
+          CASE_DIR="$CASE_DIR" python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          root = Path(os.environ['CASE_DIR'])
+          proposal = json.loads((root / 'proposal.json').read_text())
+          actual = set(subprocess.check_output(['git', 'diff', '--cached', '--name-only']).decode().splitlines())
+          expected = set(proposal['changedPaths']) | {'.blue-team/security-case.json'}
+          if actual != expected:
+              raise SystemExit(f'unreviewed staged paths: {actual ^ expected}')
+          PY
+          git config user.name "$bot_login"
+          git config user.email "${bot_login}@users.noreply.github.com"
+          git commit -m 'fix(security): update one vulnerable dependency'
+          head=$(git rev-parse HEAD)
+          gh auth setup-git --hostname github.com
+          # Empty expected lease means the bot cannot replace an existing branch.
+          git push --force-with-lease="refs/heads/$branch:" origin "HEAD:refs/heads/$branch"
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
+            --draft --title "Security: $(python3 -c 'import json,os; print(json.load(open(os.environ["CASE_DIR"]+"/case.json"))["advisory"])')" \
+            --body-file "$CASE_DIR/pr-body.md"
+          pr=$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json number --jq .number)
+          published=$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)
+          test "$head" = "$published"
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "bot_login=$bot_login" >> "$GITHUB_OUTPUT"
+
+  review-and-merge:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions: {}
+    outputs:
+      merge_sha: ${{ steps.merge.outputs.merge_sha }}
+    steps:
+      - name: Require live protection and unchanged draft PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          POLICY_TOKEN: ${{ secrets.BLUE_POLICY_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$POLICY_TOKEN" && test "$GH_TOKEN" != "$POLICY_TOKEN"
+          cat > "$RUNNER_TEMP/check-blue-protection.py" <<'PY'
+          import json, os, urllib.request
+          repo = 'yomote/tech-playground'
+          bot_token, policy_token = os.environ['GH_TOKEN'], os.environ['POLICY_TOKEN']
+          if not policy_token or policy_token == bot_token:
+              raise SystemExit('separate ruleset credential unavailable')
+          def get(path, token=bot_token):
+              request = urllib.request.Request(f'https://api.github.com/{path}', headers={
+                  'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          settings = get(f'repos/{repo}')
+          if settings.get('allow_auto_merge') is not True:
+              raise SystemExit('repository auto-merge disabled')
+          actor = get('user').get('login')
+          if not actor or actor != os.environ['BOT_LOGIN']:
+              raise SystemExit('bot credential identity changed')
+          summaries = get(f'repos/{repo}/rulesets?includes_parents=false', policy_token)
+          matched = [x for x in summaries if x.get('name') == 'tech-playground-main' and x.get('enforcement') == 'active']
+          if len(matched) != 1:
+              raise SystemExit('active main ruleset absent or ambiguous')
+          policy = get(f'repos/{repo}/rulesets/{matched[0]["id"]}', policy_token)
+          if 'bypass_actors' not in policy:
+              raise SystemExit('no-bypass policy cannot be attested with this credential')
+          refs = policy.get('conditions', {}).get('ref_name', {})
+          if (policy.get('enforcement') != 'active' or policy.get('target') != 'branch' or
+              policy.get('bypass_actors') != [] or refs.get('include') != ['refs/heads/main'] or
+              refs.get('exclude') != []):
+              raise SystemExit('main ruleset scope or bypass changed')
+          rules = {x.get('type'): x.get('parameters', {}) for x in policy.get('rules', [])}
+          review = rules.get('pull_request', {})
+          checks = rules.get('required_status_checks', {})
+          required = {'readiness', 'github-settings-check', 'osv-pnpm', 'blue-security-verify'}
+          actual = {x.get('context') for x in checks.get('required_status_checks', []) if x.get('integration_id') == 15368}
+          if (review.get('required_approving_review_count', 0) < 1 or
+              review.get('require_last_push_approval') is not True or
+              review.get('dismiss_stale_reviews_on_push') is not True or
+              'squash' not in review.get('allowed_merge_methods', []) or
+              checks.get('strict_required_status_checks_policy') is not True or
+              not required.issubset(actual)):
+              raise SystemExit('main review or required CI policy weakened')
+          pr = get(f'repos/{repo}/pulls/{os.environ["PR_NUMBER"]}')
+          expected_draft = os.environ.get('EXPECTED_DRAFT', 'true') == 'true'
+          if (pr.get('state') != 'open' or pr.get('draft') is not expected_draft or
+              pr.get('base', {}).get('ref') != 'main' or
+              pr.get('head', {}).get('sha') != os.environ['PR_HEAD'] or
+              pr.get('head', {}).get('repo', {}).get('full_name') != repo or
+              not pr.get('head', {}).get('ref', '').startswith('bot/security-') or
+              pr.get('user', {}).get('login') != actor):
+              raise SystemExit('draft PR identity, base, or head changed')
+          print('Active no-bypass main ruleset and PR verified')
+          PY
+          python3 "$RUNNER_TEMP/check-blue-protection.py"
+      - name: Wait for current-head required checks while PR is draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python3 - <<'PY'
+          import json, os, subprocess, time
+          repo, pr, head = os.environ['GITHUB_REPOSITORY'], os.environ['PR_NUMBER'], os.environ['PR_HEAD']
+          required = {'readiness', 'github-settings-check', 'osv-pnpm', 'blue-security-verify'}
+          for attempt in range(100):
+              state = json.loads(subprocess.check_output(['gh', 'pr', 'view', pr, '--repo', repo,
+                  '--json', 'headRefOid,state,isDraft']).decode())
+              if state['headRefOid'] != head or state['state'] != 'OPEN' or not state['isDraft']:
+                  raise SystemExit('PR head or state changed during CI')
+              result = subprocess.run(['gh', 'pr', 'checks', pr, '--repo', repo,
+                  '--required', '--json', 'name,bucket'], capture_output=True, text=True)
+              if result.returncode not in (0, 1, 8):
+                  raise SystemExit(f'cannot read required checks: {result.returncode}')
+              try:
+                  rows = json.loads(result.stdout)
+              except json.JSONDecodeError:
+                  raise SystemExit('required checks response invalid')
+              by_name = {x['name']: x['bucket'] for x in rows}
+              if any(value in ('fail', 'cancel', 'skipping') for value in by_name.values()):
+                  raise SystemExit(f'required CI failed: {by_name}')
+              if required.issubset(by_name) and all(value == 'pass' for value in by_name.values()):
+                  print('All current PR required checks passed')
+                  break
+              time.sleep(15)
+          else:
+              raise SystemExit('required CI did not pass within 25 minutes')
+          PY
+      - name: Recheck live ruleset before marking ready
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          POLICY_TOKEN: ${{ secrets.BLUE_POLICY_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$POLICY_TOKEN"
+          python3 "$RUNNER_TEMP/check-blue-protection.py"
+      - name: Mark the checked draft ready for GitHub review
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          gh pr ready "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+          current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
+          draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .draft)
+          test "$current" = "$PR_HEAD" && test "$draft" = false
+      - name: Formal approval by a distinct GitHub reviewer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_REVIEWER_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          reviewer=$(gh api user --jq .login)
+          test -n "$reviewer" && test "$reviewer" != "$BOT_LOGIN"
+          current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
+          test "$current" = "$PR_HEAD"
+          draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .draft)
+          test "$draft" = false
+          gh api -X POST "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+            -f event=APPROVE -f commit_id="$PR_HEAD" \
+            -f body='Independent GitHub approval after the pinned OSV rescan, focused checks, separate Goose review, and required PR CI passed.' \
+            --jq '.state' | grep -x APPROVED
+      - name: Recheck live ruleset before auto-merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          POLICY_TOKEN: ${{ secrets.BLUE_POLICY_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$POLICY_TOKEN"
+          EXPECTED_DRAFT=false python3 "$RUNNER_TEMP/check-blue-protection.py"
+      - name: Enable protected squash auto-merge for the same head
+        id: merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
+          test "$current" = "$PR_HEAD"
+          decision=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json reviewDecision --jq .reviewDecision)
+          test "$decision" = APPROVED
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --auto --squash --match-head-commit "$PR_HEAD"
+          for attempt in $(seq 1 60); do
+            merged=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .merged)
+            if [[ "$merged" == true ]]; then
+              merge_sha=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .merge_commit_sha)
+              [[ "$merge_sha" =~ ^[0-9a-f]{40}$ ]]
+              echo "merge_sha=$merge_sha" >> "$GITHUB_OUTPUT"
+              echo "Protected squash merge completed: PR #$PR_NUMBER ($merge_sha)"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo 'Auto-merge queued but not completed within 15 minutes' >&2
+          exit 1
+
+  post-merge:
+    needs: [select, publish, review-and-merge]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.review-and-merge.outputs.merge_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: blue-selected-${{ github.run_id }}
+          path: /tmp/tech-playground-blue-${{ github.run_id }}
+      - name: Confirm the exact merged commit and selected case
+        shell: bash
+        env:
+          READ_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          MERGE_SHA: ${{ needs.review-and-merge.outputs.merge_sha }}
+          CASE_SHA256: ${{ needs.select.outputs.case_sha256 }}
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess, urllib.request
+          from pathlib import Path
+          case_path = Path(os.environ['CASE_DIR']) / 'case.json'
+          expected = os.environ['CASE_SHA256']
+          if not re.fullmatch(r'[0-9a-f]{64}', expected) or hashlib.sha256(case_path.read_bytes()).hexdigest() != expected:
+              raise SystemExit('post-merge case differs from selected case')
+          commit = os.environ['MERGE_SHA']
+          if not re.fullmatch(r'[0-9a-f]{40}', commit) or subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip() != commit:
+              raise SystemExit('checkout is not the reported merge commit')
+          request = urllib.request.Request(
+              f'https://api.github.com/repos/yomote/tech-playground/pulls/{os.environ["PR_NUMBER"]}',
+              headers={'Authorization': f'Bearer {os.environ["READ_TOKEN"]}',
+                       'Accept': 'application/vnd.github+json',
+                       'X-GitHub-Api-Version': '2022-11-28'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              pr = json.load(response)
+          if (pr.get('merged') is not True or pr.get('merge_commit_sha') != commit or
+              pr.get('head', {}).get('sha') != os.environ['PR_HEAD'] or
+              pr.get('base', {}).get('ref') != 'main'):
+              raise SystemExit('PR merge state or commit changed')
+          print(f"Checking merged PR #{os.environ['PR_NUMBER']} at {commit}")
+          PY
+      - name: Download SHA-pinned OSV-Scanner v2.7.0
+        shell: bash
+        env:
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$CASE_DIR/bin"
+          curl -fsSL --retry 3 --max-time 90 \
+            https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64 \
+            -o "$CASE_DIR/bin/osv-scanner"
+          printf '%s  %s\n' \
+            160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b \
+            "$CASE_DIR/bin/osv-scanner" | sha256sum --check --status
+          chmod 0755 "$CASE_DIR/bin/osv-scanner"
+      - name: Rescan merged main commit and report target outcome
+        shell: bash
+        env:
+          CASE_DIR: /tmp/tech-playground-blue-${{ github.run_id }}
+          MERGE_SHA: ${{ needs.review-and-merge.outputs.merge_sha }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+        run: |
+          set -euo pipefail
+          set +e
+          "$CASE_DIR/bin/osv-scanner" scan source \
+            --lockfile pnpm-lock.yaml --format=sarif --verbosity=error \
+            --output-file "$CASE_DIR/post-merge.sarif"
+          scan_exit=$?
+          set -e
+          if [[ "$scan_exit" != 0 && "$scan_exit" != 1 ]]; then exit "$scan_exit"; fi
+          SCAN_EXIT="$scan_exit" python3 - <<'PY'
+          import hashlib, importlib.util, json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          root = Path(os.environ['CASE_DIR'])
+          case = json.loads((root / 'case.json').read_text())
+          sarif_path = root / 'post-merge.sarif'
+          sarif = json.loads(sarif_path.read_text())
+          path = Path('demos/blue-team-agent/security_loop.py')
+          spec = importlib.util.spec_from_file_location('security_loop', path)
+          if spec is None or spec.loader is None:
+              raise SystemExit('security loop parser unavailable on merged commit')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          findings = module.sarif_findings(sarif)
+          exit_code = int(os.environ['SCAN_EXIT'])
+          if (exit_code == 1) != bool(findings):
+              raise SystemExit('OSV exit code and SARIF disagree')
+          aliases = set(case['aliases'])
+          target = [row for row in findings if row['package'] == case['package']
+                    and aliases.intersection(row['aliases'])]
+          result = {
+              'schemaVersion': 1, 'stage': 'post-merge',
+              'status': 'passed' if not target else 'failed',
+              'observedAt': datetime.now(timezone.utc).isoformat(),
+              'caseId': case['caseId'], 'prNumber': int(os.environ['PR_NUMBER']),
+              'mergeCommitSha': os.environ['MERGE_SHA'],
+              'package': case['package'], 'advisory': case['advisory'],
+              'aliases': sorted(aliases), 'targetFindingRows': len(target),
+              'allFindingRows': len(findings), 'scanExitCode': exit_code,
+              'scannerVersion': '2.7.0',
+              'scannerSha256': hashlib.sha256((root / 'bin/osv-scanner').read_bytes()).hexdigest(),
+              'sarifSha256': hashlib.sha256(sarif_path.read_bytes()).hexdigest(),
+          }
+          (root / 'post-merge.json').write_text(json.dumps(result, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Merged commit OSV check\n\n')
+              summary.write(f"- PR: #{result['prNumber']}\n- Commit: `{result['mergeCommitSha']}`\n")
+              summary.write(f"- Package: `{result['package']}`; advisory: `{result['advisory']}`\n")
+              summary.write(f"- Remaining target findings: **{len(target)}**\n")
+              summary.write(f"- Result: **{result['status'].upper()}**\n")
+          if target:
+              raise SystemExit('selected advisory remains in merged commit')
+          PY
+      - name: Preserve merged-commit scan evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: blue-post-merge-${{ github.run_id }}
+          path: |
+            /tmp/tech-playground-blue-${{ github.run_id }}/post-merge.sarif
+            /tmp/tech-playground-blue-${{ github.run_id }}/post-merge.json
+          retention-days: 14
+          if-no-files-found: warn

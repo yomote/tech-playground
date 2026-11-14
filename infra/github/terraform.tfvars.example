@@ -3,7 +3,8 @@ repository_name = "tech-playground"
 visibility      = "public"
 
 # These capabilities depend on the repository/account plan. Opt in after checking actual support.
-enable_main_ruleset      = false
-existing_ruleset_id      = null
-enable_azure_environment = false
-import_azure_environment = false
+enable_main_ruleset        = false
+enable_security_auto_merge = false
+existing_ruleset_id        = null
+enable_azure_environment   = false
+import_azure_environment   = false

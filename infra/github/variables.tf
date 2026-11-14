@@ -28,7 +28,13 @@ variable "visibility" {
 variable "enable_main_ruleset" {
   type        = bool
   default     = false
-  description = "Enable only after confirming repository ruleset support and a successful readiness check."
+  description = "Enable only after confirming ruleset support, an independent reviewer, and successful readiness, github-settings-check, osv-pnpm, and blue-security-verify checks on PRs."
+}
+
+variable "enable_security_auto_merge" {
+  type        = bool
+  default     = false
+  description = "Allow PR auto-merge only with the active main ruleset; GitHub still waits for independent approval and required CI checks."
 }
 
 variable "existing_ruleset_id" {
