@@ -1,0 +1,24 @@
+id: blue-team-agent
+title: Goose Blue Team Agent
+status: exploring
+summary: GitHubの依存脆弱性を一件選び、Gooseによる修正案、再走査、別モデルのレビューを検証する。
+goal: GitHubの走査結果から修正PRの保護付きマージまでを自動化し、誤った差分を停止する。
+questions:
+  - 実際のGitHubアラートとOSV走査を同じ依存脆弱性に結び付けられるか
+  - Gooseの不正な差分を拒否し、正しい依存更新だけを検証できるか
+  - 別主体のレビューと保護ルールを確認してから自動マージできるか
+tags: [security, goose, blue-team, osv, dependabot]
+stack: [python, github-actions, goose, pnpm, terraform]
+findings:
+  - body-parserの局所試行でGooseの正しい差分と決定的な再生成差分が一致した。
+  - アプリの依存を削る誤った候補は構成検査で拒否した。
+  - 実アラート取得、隔離runner、GitHub上の自動マージは未検証。
+references:
+  - title: Goose CLI
+    url: https://goose-docs.ai/docs/guides/goose-cli-commands/
+  - title: GitHub Dependabot alerts API
+    url: https://docs.github.com/en/rest/dependabot/alerts
+  - title: OSV-Scanner
+    url: https://google.github.io/osv-scanner/
+createdAt: 2026-11-14
+updatedAt: 2026-11-14
