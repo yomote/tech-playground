@@ -97,6 +97,8 @@ Langfuse v4へ送る場合だけ`--langfuse-url https://<Langfuseのorigin>`を�
 
 修正版の試験用依存と主体別認可で行った14:29–14:33 JSTの再試行は、提案役Gooseのモデル生成が240秒の上限に達して停止した。Gatewayは提案役のモデル通信と親spanを記録したが、候補の検証と別レビューは実行していない。[保存結果](../../docs/ai-platform-v38/goose-gateway-proposal-timeout-20261114.json)の`unclassified_stage_failure`は試行器の表示上の分類不足で、240秒で終了した事実を変えない。試行器はこの固定形式を`goose_proposal_timeout`と表示するよう修正する。
 
+15:41–15:43 JSTの[局所実行](../../docs/ai-platform-v38/goose-security-live-trial-20261114.md)では、試行専用の`--qwen-no-think`を指定したGooseが構造検査を通る差分を作り、固定検査・再走査で対象0件、別Gooseが`APPROVE`を返した。Gatewayは役割別のモデル要求と両段階の局所OTLPモデルspanを照合し、`trialPassed=true`になった。スイッチは提案promptで`/no_think`を**要求**するだけで、モデル内部の切替や速度改善を証明しない。定期Jobの既定は変えない。非同期OTLPの待機は固定2秒を最大15秒の条件付き待機に変更し、spanが欠けた場合は不合格のままにする。これは合成alertを使った局所実行であり、Langfuse保存やGitHub自動PR・mergeの成立ではない。
+
 ```bash
 python demos/blue-team-agent/gateway_trial.py --repo /path/to/clean-main-checkout --case /path/to/case.json --goose /path/to/goose-v1.54.0-linux-amd64 --gateway /path/to/agentgateway-v1.6.0-linux-amd64 --scanner /path/to/osv-scanner-v2.7.0-linux-amd64 --output .artifacts/blue-goose-gateway-auth.json --authorization-only
 ```

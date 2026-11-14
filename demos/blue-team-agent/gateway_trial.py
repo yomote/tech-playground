@@ -468,6 +468,8 @@ def run_stage(argv: list[str], env: dict[str, str], out: Path) -> dict:
         result["reason"], result["timedOut"] = public_stage_reason(doc["reason"])
     if doc.get("producer"):
         result["producer"] = doc["producer"]
+    if isinstance(doc.get("qwenNoThinkRequested"), bool):
+        result["qwenNoThinkRequested"] = doc["qwenNoThinkRequested"]
     if doc.get("patchSha256"):
         result["patchSha256"] = doc["patchSha256"]
     if doc.get("rescan"):
@@ -488,6 +490,26 @@ def stage_trace(spans: list[dict], trace_id: str, parent_id: str, model: str) ->
                 span["knownContentAttributeNameSeen"] for span in selected)}
 
 
+def await_model_spans(receiver: OtlpReceiver, trace_meta: dict[str, tuple[str, str]],
+                      executed_stages: set[str], seconds: float = 15.0) -> tuple[dict[str, bool], int]:
+    """Wait briefly for exported model spans; a missing span remains a failure."""
+    required = {stage: (trace_meta[stage][0], MODELS[stage])
+                for stage in ("propose", "review") if stage in executed_stages}
+    started = time.monotonic()
+    deadline = started + seconds
+    while True:
+        with receiver.lock:
+            observed = {stage: any(
+                span["traceId"] == trace_id
+                and span["attributes"].get("gen_ai.request.model") == model
+                for span in receiver.spans)
+                for stage, (trace_id, model) in required.items()}
+        remaining = deadline - time.monotonic()
+        if all(observed.values()) or remaining <= 0:
+            return observed, round((time.monotonic() - started) * 1000)
+        time.sleep(min(0.2, remaining))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, required=True)
@@ -500,6 +522,8 @@ def main() -> int:
     parser.add_argument("--otlp-port", type=int, default=16522)
     parser.add_argument("--admin-port", type=int, default=16523)
     parser.add_argument("--timeout", type=int, default=300)
+    parser.add_argument("--qwen-no-think", action="store_true",
+                        help="trial only: request Qwen3 non-thinking mode for proposal")
     parser.add_argument("--authorization-only", action="store_true",
                         help="check Gateway JWT/model policy without running Goose")
     parser.add_argument("--langfuse-url",
@@ -540,6 +564,7 @@ def main() -> int:
               "receiverIsLangfuse": False, "langfuseReadbackConfirmed": False,
               "langfuseExportConfigured": bool(relay),
               "langfuseExportHttpAccepted": False,
+              "qwenNoThinkRequested": args.qwen_no_think,
               "developerToolGovernedByGateway": False,
               "runIdHeaderIsAuthorization": False,
               "allOtlpAttributesProvenSafe": False, "publishable": False,
@@ -621,6 +646,8 @@ def main() -> int:
                 propose_cmd = [sys.executable, str(loop), "propose", "--repo", str(args.repo),
                                "--case", str(args.case), "--goose", str(args.goose),
                                "--timeout", str(args.timeout), "--out", str(proposal)]
+                if args.qwen_no_think:
+                    propose_cmd.append("--qwen-no-think")
                 result["stages"]["propose"] = run_stage(
                     propose_cmd,
                     stage_env(MODELS["propose"], tokens["propose"], args.model_port,
@@ -646,7 +673,10 @@ def main() -> int:
                         review_cmd, stage_env(MODELS["review"], tokens["review"],
                                               args.model_port, *trace_meta["review"],
                                               case["caseId"]), review)
-                time.sleep(2)  # Allow the local asynchronous OTLP exporter to flush.
+                observed, waited_ms = await_model_spans(receiver, trace_meta,
+                                                        set(result["stages"]))
+                result["checks"]["stageModelSpansSeenBeforeShutdown"] = observed
+                result["checks"]["otlpFlushWaitMs"] = waited_ms
                 stop_group(gateway)
             result["checks"]["gatewayModelRequests"] = gateway_counts(log_file)
             with receiver.lock:

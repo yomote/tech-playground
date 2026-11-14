@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 import sys
 import tempfile
-from threading import Thread
+from threading import Lock, Thread
+import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from urllib.request import Request, urlopen
@@ -19,6 +21,35 @@ import gateway_trial as trial  # noqa: E402
 
 
 class GatewayTrialEvidenceTests(unittest.TestCase):
+    def test_waits_for_executed_stage_model_spans_and_fails_closed(self):
+        receiver = SimpleNamespace(lock=Lock(), spans=[])
+        traces = {"propose": ("11" * 16, "22" * 8),
+                  "review": ("33" * 16, "44" * 8)}
+
+        def delayed_review_span():
+            time.sleep(0.05)
+            with receiver.lock:
+                receiver.spans.append({"traceId": traces["review"][0],
+                                       "attributes": {"gen_ai.request.model": "qwen3.5:35b"}})
+
+        receiver.spans.append({"traceId": traces["propose"][0],
+                               "attributes": {"gen_ai.request.model": "qwen3:8b"}})
+        worker = Thread(target=delayed_review_span)
+        worker.start()
+        observed, waited_ms = trial.await_model_spans(
+            receiver, traces, {"propose", "verify", "review"}, seconds=0.5)
+        worker.join(timeout=1)
+        self.assertEqual(observed, {"propose": True, "review": True})
+        self.assertLess(waited_ms, 1000)
+
+        with receiver.lock:
+            receiver.spans = receiver.spans[:1]
+        observed, waited_ms = trial.await_model_spans(
+            receiver, traces, {"propose", "review"}, seconds=0.05)
+        self.assertEqual(observed, {"propose": True, "review": False})
+        self.assertGreaterEqual(waited_ms, 40)
+        self.assertLess(waited_ms, 1000)
+
     def test_otlp_projection_discards_content_and_preserves_trace_relation(self):
         span = Span(trace_id=bytes.fromhex("11" * 16),
                     span_id=bytes.fromhex("22" * 8),

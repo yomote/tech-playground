@@ -718,6 +718,10 @@ def propose(args: argparse.Namespace) -> dict[str, Any]:
                 "Make the smallest manifest/lockfile update that installs the fixed version. "
                 "If this is impossible, leave files unchanged and explain in your response."
             )
+            if args.qwen_no_think:
+                # Explicit trial mode for Qwen3. The default workflow keeps its
+                # normal reasoning behavior and all downstream gates remain.
+                prompt += "\n/no_think\n"
             run = process(
                 [str(args.goose), "run", "--no-profile", "--with-builtin", "developer",
                  "--no-session", "--max-turns", "8", "--max-tool-repetitions", "3", "-i", "-"],
@@ -982,6 +986,8 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("--case", type=Path, required=True)
     a.add_argument("--goose", type=Path, required=True)
     a.add_argument("--timeout", type=int, default=300)
+    a.add_argument("--qwen-no-think", action="store_true",
+                   help="trial only: append Qwen3 /no_think to the proposal prompt")
     a.add_argument("--out", type=Path, required=True)
     a = subs.add_parser("verify")
     a.add_argument("--repo", type=Path, required=True)
@@ -1028,6 +1034,8 @@ def main(argv: list[str] | None = None) -> int:
                   "reason": str(exc) if isinstance(exc, GateError) else type(exc).__name__,
                   "publishable": False}
         code = 2
+    if args.stage == "propose":
+        result["qwenNoThinkRequested"] = args.qwen_no_think
     try:
         write_json(args.out, result)
     except OSError as exc:

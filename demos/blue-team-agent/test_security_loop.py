@@ -234,6 +234,34 @@ class SecurityLoopTest(unittest.TestCase):
             self.assertIn("  - apps/*", after)
             self.assertIn("  esbuild: true", after)
 
+    def test_qwen_no_think_is_explicit_proposal_trial_only(self) -> None:
+        code, _ = self.select()
+        self.assertEqual(code, 0)
+        goose = self.root / "trial-goose"
+        goose.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        goose.chmod(0o700)
+        seen: list[str] = []
+
+        def fake_process(_argv, *, cwd, env, timeout, stdin):
+            seen.append(stdin)
+            return {"exitCode": 0, "timedOut": False, "durationMs": 1,
+                    "stdoutSha256": loop.digest(b""), "stderrSha256": loop.digest(b""),
+                    "stdoutBytes": 0, "stderrBytes": 0, "_stdout": b""}
+
+        with patch.object(loop, "GOOSE_SHA256", loop.file_digest(goose)), patch.object(
+            loop, "process", side_effect=fake_process
+        ), patch.object(loop, "regenerate_lockfile", return_value=FIXED_LOCKFILE):
+            for use_switch in (False, True):
+                output = self.root / f"proposal-{use_switch}.json"
+                args = ["propose", "--repo", str(self.repo), "--case", str(self.root / "case.json"),
+                        "--goose", str(goose), "--out", str(output)]
+                if use_switch:
+                    args.append("--qwen-no-think")
+                self.assertEqual(loop.main(args), 0)
+                self.assertEqual(json.loads(output.read_text())["qwenNoThinkRequested"], use_switch)
+        self.assertNotIn("/no_think", seen[0])
+        self.assertTrue(seen[1].endswith("\n/no_think\n"))
+
     def test_propose_verify_review_separate_processes(self) -> None:
         code, case = self.select()
         self.assertEqual(code, 0)
