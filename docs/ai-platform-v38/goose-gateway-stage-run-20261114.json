@@ -1,0 +1,84 @@
+{
+  "baseSha": "f715deb90150d3fcfe510fd2e7b8f373ca0a8d5f",
+  "caseId": "BT-940932b72f84f6b5",
+  "caseSha256": "103dcd3547721c39b3f993ee82c87c14a14ea3f88808b5013df079ac5da02752",
+  "checks": {
+    "gatewayConfigValid": true,
+    "gatewayModelRequests": {
+      "propose": {
+        "modelNames": [
+          "qwen3:8b"
+        ],
+        "requests": 8,
+        "successes": 7
+      },
+      "review": {
+        "modelNames": [
+          "qwen3.5:35b"
+        ],
+        "requests": 3,
+        "successes": 2
+      }
+    },
+    "gatewayStarted": true,
+    "otlpHttpRequests": 9,
+    "otlpParseErrors": 0,
+    "unknownModelHttpStatus": 404,
+    "withoutJwtHttpStatus": 401
+  },
+  "completedAtUtc": "2026-11-14T05:08:55.695096+00:00",
+  "developerToolGovernedByGateway": false,
+  "gatewayVersion": "1.6.0",
+  "gooseVersion": "1.54.0",
+  "langfuseReadbackConfirmed": false,
+  "modelCatalog": [
+    "qwen3:8b",
+    "qwen3.5:35b"
+  ],
+  "publishable": false,
+  "receiverIsLangfuse": false,
+  "runIdHeaderIsAuthorization": false,
+  "stages": {
+    "propose": {
+      "durationMs": 95850,
+      "exitCode": 0,
+      "patchSha256": "af4e75d75b58667e1fa8881e6be83af48e39e09027117b3bfa6dc4f950626f88",
+      "producer": "goose",
+      "status": "proposed",
+      "timedOut": false
+    },
+    "review": {
+      "durationMs": 26429,
+      "exitCode": 2,
+      "reason": "review_response_not_json",
+      "status": "blocked",
+      "timedOut": false
+    },
+    "verify": {
+      "durationMs": 20605,
+      "exitCode": 0,
+      "patchSha256": "af4e75d75b58667e1fa8881e6be83af48e39e09027117b3bfa6dc4f950626f88",
+      "status": "verified",
+      "targetFindingRows": 0,
+      "timedOut": false
+    }
+  },
+  "startedAtUtc": "2026-11-14T05:06:25.180084+00:00",
+  "traces": {
+    "propose": {
+      "contentAttributeNameSeen": false,
+      "expectedModelObserved": true,
+      "parentLinked": true,
+      "spanCount": 13,
+      "traceId": "2951af32c345834a7bedccc89bbed51a"
+    },
+    "review": {
+      "contentAttributeNameSeen": false,
+      "expectedModelObserved": true,
+      "parentLinked": true,
+      "spanCount": 5,
+      "traceId": "78c747191811cd227375c12bb7179e72"
+    }
+  },
+  "trialPassed": false
+}

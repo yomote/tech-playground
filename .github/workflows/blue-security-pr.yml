@@ -1,0 +1,136 @@
+name: Blue security target verification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  blue-security-verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a case on security bot pull requests
+        id: case
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$HEAD_REF" == bot/security-* && ! -f .blue-team/security-case.json ]]; then
+            echo 'security bot PR has no case manifest' >&2
+            exit 1
+          fi
+          # Case evidence is scoped to the security PR. A merged historical case
+          # must not pin every subsequent PR to its old fixed version.
+          if [[ "$HEAD_REF" == bot/security-* ]]; then
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          c = json.loads(Path('.blue-team/security-case.json').read_text())
+          required = ('caseId', 'ruleId', 'packageName', 'fixedVersion', 'baseSha', 'patchSha256')
+          if any(not isinstance(c.get(k), str) or not c[k] for k in required):
+              raise SystemExit('invalid security case manifest')
+          if not isinstance(c.get('changedPaths'), list) or not c['changedPaths']:
+              raise SystemExit('missing reviewed paths')
+          if not c['ruleId'].startswith(('CVE-', 'GHSA-')):
+              raise SystemExit('invalid advisory identifier')
+          PY
+            echo 'run_scan=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run_scan=false' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        if: steps.case.outputs.run_scan == 'true'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.case.outputs.run_scan == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Verify lockfile and exact reviewed patch
+        if: steps.case.outputs.run_scan == 'true'
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          if [[ "$EVENT_NAME" == pull_request && "$HEAD_REF" == bot/security-* ]]; then
+            python3 - <<'PY'
+          import hashlib, json, re, subprocess
+          from pathlib import Path
+          c = json.loads(Path('.blue-team/security-case.json').read_text())
+          base = c['baseSha']
+          paths = c.get('changedPaths')
+          if not re.fullmatch(r'[0-9a-f]{40}', base) or not isinstance(paths, list) or not paths:
+              raise SystemExit('invalid base or changed paths')
+          if set(paths) != {'pnpm-lock.yaml', 'pnpm-workspace.yaml'}:
+              raise SystemExit('unexpected changed path')
+          run = lambda *a: subprocess.check_output(['git',*a])
+          actual = set(run('diff','--name-only',base,'HEAD').decode().splitlines())
+          if actual != set(paths) | {'.blue-team/security-case.json'}:
+              raise SystemExit('PR changed files differ from reviewed patch')
+          patch = run('diff','--binary',base,'HEAD','--',*paths)
+          if hashlib.sha256(patch).hexdigest() != c['patchSha256']:
+              raise SystemExit('PR patch differs from reviewed patch')
+          PY
+          fi
+          base_sha=$(python3 -c 'import json; print(json.load(open(".blue-team/security-case.json"))["baseSha"])')
+          git show "$base_sha:demos/blue-team-agent/security_loop.py" > "$RUNNER_TEMP/security_loop.py"
+          python3 "$RUNNER_TEMP/security_loop.py" validate \
+            --repo . --case .blue-team/security-case.json \
+            --out "$RUNNER_TEMP/blue-security-validation.json"
+      - name: Download and verify OSV-Scanner v2.7.0
+        if: steps.case.outputs.run_scan == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/security-tools
+          curl -fsSL --retry 3 --max-time 90 \
+            https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64 \
+            -o .artifacts/security-tools/osv-scanner
+          printf '%s  %s\n' \
+            '160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b' \
+            '.artifacts/security-tools/osv-scanner' | sha256sum --check --status
+          chmod 0755 .artifacts/security-tools/osv-scanner
+      - name: Rescan and reject the selected advisory
+        if: steps.case.outputs.run_scan == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          .artifacts/security-tools/osv-scanner scan source \
+            --lockfile pnpm-lock.yaml --format=sarif --verbosity=error \
+            --output-file .artifacts/security-target.sarif
+          scan_exit=$?
+          set -e
+          if [[ "$scan_exit" != 0 && "$scan_exit" != 1 ]]; then exit "$scan_exit"; fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          case = json.loads(Path('.blue-team/security-case.json').read_text())
+          result = json.loads(Path('.artifacts/security-target.sarif').read_text())
+          if result.get('version') != '2.1.0' or not result.get('runs'):
+              raise SystemExit('invalid OSV SARIF')
+          package = case['packageName']
+          rule = case['ruleId']
+          matching = []
+          for run in result['runs']:
+              for finding in run.get('results', []):
+                  message = finding.get('message', {}).get('text', '')
+                  if finding.get('ruleId') == rule and message.startswith(f"Package '{package}@"):
+                      matching.append(message)
+          if matching:
+              raise SystemExit(f"selected advisory still present for {package}: {rule}")
+          print(f"selected advisory absent from pinned OSV rescan: {package} {rule}")
+          PY
