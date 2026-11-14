@@ -49,6 +49,12 @@ class GateError(Exception):
     pass
 
 
+class ReviewRequestedChanges(GateError):
+    def __init__(self, review_reason: str):
+        super().__init__("review_requested_changes")
+        self.review_reason = review_reason
+
+
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -907,7 +913,7 @@ def review(args: argparse.Namespace) -> dict[str, Any]:
                 or not isinstance(decision["reason"], str) or not 1 <= len(decision["reason"]) <= 400):
             raise GateError("review_response_invalid")
         if decision["verdict"] != "APPROVE":
-            raise GateError("review_requested_changes")
+            raise ReviewRequestedChanges(decision["reason"])
         return {
             "schemaVersion": 1, "stage": "review", "status": "reviewed",
             "caseId": proposal["caseId"], "baseSha": proposal["baseSha"],
@@ -974,6 +980,12 @@ def main(argv: list[str] | None = None) -> int:
         result = {"select": select, "propose": propose, "verify": verify,
                   "review": review, "validate": validate}[args.stage](args)
         code = 0
+    except ReviewRequestedChanges as exc:
+        result = {"schemaVersion": 1, "stage": args.stage, "status": "blocked",
+                  "reason": "review_requested_changes",
+                  "reviewer": {"verdict": "REQUEST_CHANGES", "reason": exc.review_reason},
+                  "publishable": False}
+        code = 2
     except (GateError, FileNotFoundError, KeyError, OSError, subprocess.TimeoutExpired) as exc:
         result = {"schemaVersion": 1, "stage": args.stage, "status": "blocked",
                   "reason": str(exc) if isinstance(exc, GateError) else type(exc).__name__,
