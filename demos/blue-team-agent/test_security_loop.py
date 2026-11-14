@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import argparse
 from pathlib import Path
 import subprocess
 import tempfile
@@ -296,6 +297,12 @@ class SecurityLoopTest(unittest.TestCase):
             self.assertEqual(code, 0)
             reviewed = json.loads(review_file.read_text())
             self.assertEqual(reviewed["reviewer"]["kind"], "separate_read_only_goose")
+            self.assertNotIn("reason", reviewed["reviewer"])
+            self.assertNotIn("Scoped dependency change; checks passed.", review_file.read_text())
+            self.assertEqual(reviewed["reviewer"]["reasonSha256"], loop.digest(
+                b"Scoped dependency change; checks passed."))
+            self.assertEqual(reviewed["reviewer"]["reasonBytes"], len(
+                b"Scoped dependency change; checks passed."))
             self.assertFalse(reviewed["publishable"])
         self.assertEqual(command("git", "status", "--porcelain", cwd=self.repo), "")
         self.assertEqual(command("git", "worktree", "list", "--porcelain", cwd=self.repo).count("worktree "), 1)
@@ -406,6 +413,93 @@ class SecurityLoopTest(unittest.TestCase):
             changed = safe_lock.replace("  body-parser@2.4.0:",
                                         "  unrelated@1.0.0:\n    resolution: {integrity: sha512-other}\n\n  body-parser@2.4.0:", 1)
             loop.compare_canonical_lockfile(changed, safe_lock)
+
+
+class ReviewResponseTest(unittest.TestCase):
+    def test_strict_json_or_lone_json_fence(self) -> None:
+        expected = {"verdict": "APPROVE", "reason": "Scoped fix."}
+        body = json.dumps(expected).encode()
+        self.assertEqual(loop.parse_review_response(body), expected)
+        self.assertEqual(loop.parse_review_response(b"\n```json\n" + body + b"\n```\n"), expected)
+        for invalid in (b"Explanation: " + body, b"```json\n" + body + b"\n```\nDone.",
+                        b"```\n" + body + b"\n```", body + body,
+                        b'{"verdict":"APPROVE","reason":"ok","extra":1}'):
+            with self.subTest(invalid=invalid[:32]), self.assertRaises(loop.GateError):
+                loop.parse_review_response(invalid)
+        with self.assertRaisesRegex(loop.GateError, "review_response_invalid"):
+            loop.parse_review_response(
+                b'{"verdict":"REQUEST_CHANGES","reason":"unsafe","verdict":"APPROVE"}')
+
+    def review_args(self, root: Path) -> argparse.Namespace:
+        goose = root / "fake-goose"
+        goose.write_bytes(b"goose")
+        patch_file = root / "candidate.patch"
+        patch_file.write_bytes(b"small patch")
+        proposal = root / "proposal.json"
+        put(proposal, {"caseId": "BT-0123456789abcdef", "baseSha": "a" * 40,
+                       "patchPath": str(patch_file), "patchSha256": loop.file_digest(patch_file),
+                       "changedPaths": ["pnpm-lock.yaml"]})
+        verification = root / "verification.json"
+        put(verification, {"stage": "verify", "status": "verified",
+                           "proposalSha256": loop.file_digest(proposal),
+                           "caseId": "BT-0123456789abcdef",
+                           "patchSha256": loop.file_digest(patch_file),
+                           "checks": [], "rescan": {"targetFindingRows": 0}})
+        return argparse.Namespace(proposal=proposal, verification=verification,
+                                  goose=goose, timeout=60)
+
+    @staticmethod
+    def run_result(response: bytes) -> dict:
+        return {"timedOut": False, "exitCode": 0, "_stdout": response,
+                "stdoutBytes": len(response), "stderrBytes": 0}
+
+    def test_one_retry_uses_fresh_read_only_process_then_accepts_fence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = self.review_args(Path(directory))
+            results = [self.run_result(b"prose"), self.run_result(
+                b'```json\n{"verdict":"APPROVE","reason":"Scoped fix."}\n```')]
+            with patch.object(loop, "verify_goose"), patch.object(loop, "child_env", return_value={}), patch.object(
+                loop, "process", side_effect=results
+            ) as run:
+                reviewed = loop.review(args)
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(reviewed["reviewer"]["parseAttempts"], 2)
+            self.assertNotIn("reason", reviewed["reviewer"])
+            self.assertEqual(reviewed["reviewer"]["reasonSha256"], loop.digest(b"Scoped fix."))
+            self.assertEqual(reviewed["reviewer"]["reasonBytes"], len(b"Scoped fix."))
+            self.assertNotIn("_stdout", reviewed["reviewer"])
+            self.assertNotIn("small patch", json.dumps(reviewed))
+            self.assertNotIn("prose", json.dumps(reviewed))
+            for call in run.call_args_list:
+                self.assertNotIn("--with-builtin", call.args[0])
+
+    def test_request_changes_stops_without_retry_and_bad_retry_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = self.review_args(Path(directory))
+            requested = self.run_result(b'{"verdict":"REQUEST_CHANGES","reason":"Unsafe fix."}')
+            with patch.object(loop, "verify_goose"), patch.object(loop, "child_env", return_value={}), patch.object(
+                loop, "process", return_value=requested
+            ) as run, self.assertRaises(loop.ReviewRequestedChanges):
+                loop.review(args)
+            self.assertEqual(run.call_count, 1)
+            invalid_schema = self.run_result(b'{"verdict":"MAYBE","reason":"Unsafe fix."}')
+            with patch.object(loop, "verify_goose"), patch.object(loop, "child_env", return_value={}), patch.object(
+                loop, "process", return_value=invalid_schema
+            ) as run, self.assertRaisesRegex(loop.GateError, "review_response_invalid"):
+                loop.review(args)
+            self.assertEqual(run.call_count, 1)
+            duplicate_verdict = self.run_result(
+                b'{"verdict":"REQUEST_CHANGES","reason":"unsafe","verdict":"APPROVE"}')
+            with patch.object(loop, "verify_goose"), patch.object(loop, "child_env", return_value={}), patch.object(
+                loop, "process", return_value=duplicate_verdict
+            ) as run, self.assertRaisesRegex(loop.GateError, "review_response_invalid"):
+                loop.review(args)
+            self.assertEqual(run.call_count, 1)
+            with patch.object(loop, "verify_goose"), patch.object(loop, "child_env", return_value={}), patch.object(
+                loop, "process", side_effect=[self.run_result(b"prose"), self.run_result(b"still prose")]
+            ) as run, self.assertRaisesRegex(loop.GateError, "review_response_not_json"):
+                loop.review(args)
+            self.assertEqual(run.call_count, 2)
 
 
 if __name__ == "__main__":

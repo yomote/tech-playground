@@ -21,7 +21,7 @@
     "unknownModelHttpStatus": 404,
     "withoutJwtHttpStatus": 401
   },
-  "completedAtUtc": "2026-11-14T05:12:57.920462+00:00",
+  "completedAtUtc": "2026-11-14T05:21:28.155881+00:00",
   "developerToolGovernedByGateway": false,
   "gatewayVersion": "1.6.0",
   "gooseVersion": "1.54.0",
@@ -35,6 +35,6 @@
   "receiverIsLangfuse": false,
   "runIdHeaderIsAuthorization": false,
   "stages": {},
-  "startedAtUtc": "2026-11-14T05:12:57.800754+00:00",
+  "startedAtUtc": "2026-11-14T05:21:28.040831+00:00",
   "traces": {}
 }

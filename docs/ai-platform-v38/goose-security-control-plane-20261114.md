@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Goose と Agentgateway | Blue の一件を Goose 1.54.0 → Agentgateway 1.6.0 → ローカル Ollama で試し、提案・検証と別モデルの通信を記録した。別の認証試行では JWT なし 401、未知モデル 404、提案役とレビュー役の相互モデル要求 403 を確認した。 | 新しいモデル別認可設定のまま二段階レビューを完走した run はない。Blue の定期実行は現在 Ollama に直結する。Developer 拡張のローカル Shell・ファイル操作は Gateway を通らない。 |
 | Agentgateway と Langfuse | Blue のモデル通信から局所 OTLP 検査受信器へ span を送信し、二段階の trace ID・親 span・モデル名を照合した。 | Langfuse 本体への保存・API 読戻しは未実行。現環境には本体 URL と project 鍵がない。既知の本文属性名がなかったことだけでは全 span 値の非漏えいを証明できない。 |
-| AGT | AGT 4.1.0 core の `govern()` は、既存の通常見積で明示した資料参照 Tool 4 個の実行前判断に使っている。AgentMesh Registry へ合成 Goose ID・版・owner・権能を登録し、版違いと失効後に登録情報の照合が不一致になることをローカル実行で確認した。 | Registry の試行はメモリ内で、照合処理も試行側にある。実 Goose 起動、資格確認、Gateway、Developer 拡張、GitHub 書込への強制は未接続。 |
+| AGT | AGT 4.1.0 core の `govern()` は、既存の通常見積で明示した資料参照 Tool 4 個の実行前判断に使っている。AgentMesh Registry へ合成 Goose ID・版・owner・権能を登録し、版違いと失効後に登録情報の照合が不一致になることをローカル実行で確認した。 | Registry の試行はメモリ内で、照合処理も試行側にある。実 Goose 起動、資格確認、Gateway、Developer 拡張、GitHub 書込への強制は未接続。AGT 4.1.0 の `cryptography<49` 要求は、公開済み修正版50.0.0以降と衝突する。 |
 | GitHub 操作 | PR 候補の差分、局所の別モデルレビュー、対象 CVE の再走査、同一 head SHA を指定する保護付きマージのワークフローを実装した。 | 実 Dependabot alert からの自動選定、正式レビュー、保護 main への自動反映と反映後走査。 |
 
 ## 責任を置く場所
@@ -42,6 +42,8 @@ Agent の作者は実装を自由に追加できる。実行時の権限は実�
 
 AGT の公式制約にも、policy 未読込時の許可、Tool 監査と外部の実行結果の差、資格情報の保持が挙げられる。したがって「AGT を導入した」だけでは統制済みと判定しない。登録版の照合、Gateway の拒否、runner の停止、GitHub の実状態を個別に確認する。
 
+依存版も採否条件に入れる。2026-11-14に、ローカルの AGT 4.1.0 配布メタデータと `pip` の解決結果で `cryptography<49.0,>=46.0.7` を確認した。一方、cryptography の[公開済み助言](https://github.com/pyca/cryptography/security/advisories/GHSA-g6cj-pr64-35w5)は修正版を50.0.0としている。今回の Registry 試行は隔離環境で行い、AGT の本番採用は依存条件の解消と再検証後に判断する。Gateway 試行の依存版は修正版の PyJWT 2.15.1 と cryptography 50.0.2 に分けた。
+
 ## 一件の追跡契約
 
 | 値 | 発行元と用途 |
@@ -52,16 +54,17 @@ AGT の公式制約にも、policy 未読込時の許可、Tool 監査と外部�
 | PR 番号・head SHA・正式 review ID・merge SHA | GitHub API から読戻す。別モデルの `APPROVE` と GitHub 上の正式承認を別欄に置く。 |
 | 段階、許否、所要時間、結果 hash | Actions 証拠と trace を照合する。prompt、patch 本文、Tool 引数、生 stdout/stderr、資格情報は送らない。 |
 
-trace ID の一致だけで Tool の成功、業務への影響、マージ後の安全性を認定しない。各段階の実結果と GitHub の状態を別に読戻す。
+trace ID の一致だけで Tool の成功、業務への影響、マージ後の安全性を認定しない。各段階の実結果と GitHub の状態を別に読戻す。成功時の `review.json` は GitHub Actions が人の確認前に Artifact へ送るため、モデル生成の理由文を保存せず、SHA-256 とバイト数だけ記録する。変更要求で停止したローカル結果には理由文が残るため、公開しない。
 
-## 2026-11-14 の二つのローカル試行
+## 2026-11-14 のローカル試行
 
-両試行は同じ合成 Dependabot alert と実際の `body-parser` 修正候補を対象にした。GitHub の実 alert から自動起動した結果ではない。保存した JSON は秘密鍵、JWT、prompt、patch 本文、raw span を含まない。
+三つの試行は同じ合成 Dependabot alert と実際の `body-parser` 修正候補を対象にした。GitHub の実 alert から自動起動した結果ではない。保存した JSON は秘密鍵、JWT、prompt、patch 本文、raw span を含まない。
 
 | 試行 | 実測した結果 | 判定 |
 | --- | --- | --- |
 | [Goose 段階実行](goose-gateway-stage-run-20261114.json)（14:06–14:08 JST） | Goose が修正案を作成（95.9 秒）、検証・再走査で対象検出 0 件（20.6 秒）。Gateway ログは提案 8 要求、レビュー 3 要求を記録し、局所 OTLP で両 trace の親 span とモデル名を照合した。別モデルのレビュー回答は JSON として読めず停止した。 | `trialPassed=false`。この時点の設定は二つの JWT 主体をモデル別に分けていない。 |
-| [モデル別認可](goose-gateway-auth-20261114.json)（14:12 JST） | 設定を直し、JWT なし 401、未知モデル 404、提案役→レビューモデル 403、レビュー役→提案モデル 403 を実測した。モデル一覧も役ごとに一つだけ返した。 | 認可試行は成功。この設定で Goose の修正・レビューはまだ再実行していない。 |
+| [モデル別認可](goose-gateway-auth-20261114.json)（14:21 JST） | 修正版 PyJWT 2.15.1 と cryptography 50.0.2 を使い、JWT なし 401、未知モデル 404、提案役→レビューモデル 403、レビュー役→提案モデル 403 を再確認した。モデル一覧も役ごとに一つだけ返した。 | 認可試行は成功。この設定での Goose 全段階の結果は別の実行で確認する。 |
+| [モデル別認可を使った再試行](goose-gateway-second-failed-run-20261114.json)（14:20–14:24 JST） | Goose 案は構造検査で棄却され、固定手順で候補を作成した。再走査では対象検出 0 件。別 Goose は `REQUEST_CHANGES` を返し、publish 前に停止した。Gateway で役ごとのモデル拒否と両 trace を観測した。 | `trialPassed=false`。この試行は旧 Python 依存版を使用し、レビューの重複 JSON キー拒否を追加する前にレビュー処理が起動したため、受入証拠には採用しない。 |
 
 局所 OTLP 受信器は既知の本文属性名を検出しなかったが、全属性・イベント値の安全性は未監査である。Langfuse へ実送信する前に exporter の実データを別途監査する。運用担当は Gateway 記録から担当役とモデル要求を追える一方、レビューが不正な形式で止まったため、自動修正の所要時間や人手削減はまだ実測できない。
 

@@ -1,5 +1,0 @@
-# Local Gateway and AgentMesh trials only; not a runtime dependency of security_loop.py.
-PyJWT==2.7.0
-cryptography==48.0.1
-opentelemetry-proto==1.45.1
-agent-governance-toolkit-core==4.1.0

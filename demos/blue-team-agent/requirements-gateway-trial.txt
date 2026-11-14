@@ -1,0 +1,4 @@
+# Local Gateway trial only; not a runtime dependency of security_loop.py.
+PyJWT==2.15.1
+cryptography==50.0.2
+opentelemetry-proto==1.45.1
