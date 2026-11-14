@@ -586,26 +586,6 @@ jobs:
           current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
           draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .draft)
           test "$current" = "$PR_HEAD" && test "$draft" = false
-      - name: Formal approval by a distinct GitHub reviewer
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.BLUE_REVIEWER_TOKEN }}
-          PR_NUMBER: ${{ needs.publish.outputs.pr }}
-          PR_HEAD: ${{ needs.publish.outputs.head }}
-          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
-        run: |
-          set -euo pipefail
-          test -n "$GH_TOKEN"
-          reviewer=$(gh api user --jq .login)
-          test -n "$reviewer" && test "$reviewer" != "$BOT_LOGIN"
-          current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
-          test "$current" = "$PR_HEAD"
-          draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .draft)
-          test "$draft" = false
-          gh api -X POST "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
-            -f event=APPROVE -f commit_id="$PR_HEAD" \
-            -f body='Independent GitHub approval after the pinned OSV rescan, focused checks, separate Goose review, and required PR CI passed.' \
-            --jq '.state' | grep -x APPROVED
       - name: Recheck live ruleset before auto-merge
         shell: bash
         env:
@@ -619,7 +599,6 @@ jobs:
           test -n "$GH_TOKEN" && test -n "$POLICY_TOKEN"
           EXPECTED_DRAFT=false python3 "$RUNNER_TEMP/check-blue-protection.py"
       - name: Enable protected squash auto-merge for the same head
-        id: merge
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
@@ -634,15 +613,51 @@ jobs:
           current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
           test "$current" = "$PR_HEAD"
           decision=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json reviewDecision --jq .reviewDecision)
-          test "$decision" = APPROVED
+          # Auto-merge must be requested while the independent GitHub review is
+          # still missing. Approval is the final condition that triggers merge.
+          test "$decision" != APPROVED
           pr_id=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .node_id)
           test -n "$pr_id" && test "$pr_id" != null
-          # The GraphQL mutation enables native auto-merge without invoking the
-          # CLI's immediate merge path when the PR is already mergeable.
+          # Use GitHub's native auto-merge mutation while review is still pending.
           gh api graphql \
             -f query='mutation($id: ID!, $head: GitObjectID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, expectedHeadOid: $head, mergeMethod: SQUASH}) { pullRequest { number } } }' \
             -f id="$pr_id" -f head="$PR_HEAD" \
             --jq '.data.enablePullRequestAutoMerge.pullRequest.number' | grep -x "$PR_NUMBER"
+      - name: Formal approval by a distinct GitHub reviewer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          POLICY_TOKEN: ${{ secrets.BLUE_POLICY_TOKEN }}
+          REVIEWER_TOKEN: ${{ secrets.BLUE_REVIEWER_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$POLICY_TOKEN" && test -n "$REVIEWER_TOKEN"
+          test "$GH_TOKEN" != "$REVIEWER_TOKEN"
+          EXPECTED_DRAFT=false python3 "$RUNNER_TEMP/check-blue-protection.py"
+          export GH_TOKEN="$REVIEWER_TOKEN"
+          reviewer=$(gh api user --jq .login)
+          test -n "$reviewer" && test "$reviewer" != "$BOT_LOGIN"
+          current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
+          test "$current" = "$PR_HEAD"
+          draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .draft)
+          test "$draft" = false
+          gh api -X POST "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+            -f event=APPROVE -f commit_id="$PR_HEAD" \
+            -f body='Independent GitHub approval after the pinned OSV rescan, focused checks, separate Goose review, and required PR CI passed.' \
+            --jq '.state' | grep -x APPROVED
+      - name: Wait for protected squash auto-merge
+        id: merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
           for attempt in $(seq 1 60); do
             merged=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .merged)
             if [[ "$merged" == true ]]; then
