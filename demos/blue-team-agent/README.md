@@ -85,6 +85,8 @@ python demos/blue-team-agent/gateway_trial.py \
 
 CLIは秘密鍵、JWT、プロンプト、patch本文、raw span、Gatewayログを一時領域から外へ保存しない。GooseのDeveloper拡張によるローカルのファイル・shell操作はGatewayを通らず、隔離や統制の実証にはならない。試行結果はPR作成・別主体のGitHubレビュー・mergeの証拠にもならない。
 
+Langfuse v4へ送る場合だけ`--langfuse-url https://<Langfuseのorigin>`を付け、`LANGFUSE_PUBLIC_KEY`と`LANGFUSE_SECRET_KEY`を環境から渡す。局所受信器がGatewayのOTLPを受け、許可したtraceのID・時刻・親子関係、固定のAgent役、許可モデル名、HTTP状態、token数だけで**新しいOTLP**を組み立てる。元のspan属性、event、link、本文は転送しない。明示設定時は提案・レビュー両方のHTTP受理を`trialPassed`の条件に含める。ただしLangfuseのObservations APIで同じtraceを読み戻す確認は別工程である。鍵がない環境では外部送信を行わない。GooseとOllamaが同じrunner上にいる現在の試行はGatewayを迂回できるため、本番の強制統制とは呼ばない。
+
 `agentmesh_trial.py`は、AGT 4.1.0のAgentMesh Registryへ合成Agentを登録し、版違いと失効後に登録メタデータが一致しなくなることを確認する。AGT 4.1.0が入った隔離環境で`python demos/blue-team-agent/agentmesh_trial.py`を実行する。Registryはメモリ内で、資格情報は未検証のfixtureである。結果の`metadata_match=true`はGoose起動の許可ではない。AGT 4.1.0は`cryptography<49`を要求し、同ライブラリの公開済み修正版50.0.0以降と依存条件が衝突するため、本番への採用判断は保留する。実起動の制御、永続化、GatewayとToolへの主体連携は[統制設計と受入条件](../../docs/ai-platform-v38/goose-security-control-plane-20261114.md)に残している。
 
 `--authorization-only`はGooseを起動せず、JWTなし、未登録モデル、主体に許可していないモデルの拒否を確認する。OTLP検査で報告する「本文属性名なし」は既知の属性名に限った観測であり、**全属性の安全性は未確認**。本文を扱う別の属性名が増える場合は受信前の設定と全属性を改めて確認する。`trialPassed`はGoose自身が候補を作成し、検証と別レビューが通り、既知の本文属性名を観測しない場合だけ真になる。
@@ -92,6 +94,8 @@ CLIは秘密鍵、JWT、プロンプト、patch本文、raw span、Gatewayログ
 認可だけの再現コマンドは次のとおり。2026-11-14の実測では、JWTなし401、未登録モデル404、propose主体からreviewモデル403、review主体からproposeモデル403だった。別の全段階試行ではGoose自身の候補作成と再走査は通ったが、reviewが指定JSONを返さず`trialPassed: false`となった。Langfuse本体への接続・読戻しは未実施である。
 
 同日の次の全段階試行は、合成alert由来の同じcaseで、Goose案を構造検査が拒否し、固定手順の候補作成と再走査までは通った。別Gooseは`REQUEST_CHANGES`を返したため`trialPassed: false`で停止した。OTLPの局所受信では両段階のtrace ID、親span、モデル名を照合し、既知の本文属性名は観測しなかった。これは`reviewer.reason`の公開安全性、Langfuseへの保存、実GitHub alertへの対応を実証しない。この試行のPython環境は従来の固定SDK venv（PyJWT 2.7.0、cryptography 48.0.1）であり、Gateway試験用依存を更新した環境での再実測ではない。
+
+修正版の試験用依存と主体別認可で行った14:29–14:33 JSTの再試行は、提案役Gooseのモデル生成が240秒の上限に達して停止した。Gatewayは提案役のモデル通信と親spanを記録したが、候補の検証と別レビューは実行していない。[保存結果](../../docs/ai-platform-v38/goose-gateway-proposal-timeout-20261114.json)の`unclassified_stage_failure`は試行器の表示上の分類不足で、240秒で終了した事実を変えない。試行器はこの固定形式を`goose_proposal_timeout`と表示するよう修正する。
 
 ```bash
 python demos/blue-team-agent/gateway_trial.py --repo /path/to/clean-main-checkout --case /path/to/case.json --goose /path/to/goose-v1.54.0-linux-amd64 --gateway /path/to/agentgateway-v1.6.0-linux-amd64 --scanner /path/to/osv-scanner-v2.7.0-linux-amd64 --output .artifacts/blue-goose-gateway-auth.json --authorization-only

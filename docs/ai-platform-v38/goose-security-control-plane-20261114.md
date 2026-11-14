@@ -6,8 +6,8 @@
 
 | 対象 | 確認済み | このエージェントで未確認 |
 | --- | --- | --- |
-| Goose と Agentgateway | Blue の一件を Goose 1.54.0 → Agentgateway 1.6.0 → ローカル Ollama で試し、提案・検証と別モデルの通信を記録した。別の認証試行では JWT なし 401、未知モデル 404、提案役とレビュー役の相互モデル要求 403 を確認した。 | 新しいモデル別認可設定のまま二段階レビューを完走した run はない。Blue の定期実行は現在 Ollama に直結する。Developer 拡張のローカル Shell・ファイル操作は Gateway を通らない。 |
-| Agentgateway と Langfuse | Blue のモデル通信から局所 OTLP 検査受信器へ span を送信し、二段階の trace ID・親 span・モデル名を照合した。 | Langfuse 本体への保存・API 読戻しは未実行。現環境には本体 URL と project 鍵がない。既知の本文属性名がなかったことだけでは全 span 値の非漏えいを証明できない。 |
+| Goose と Agentgateway | Blue の一件を Goose 1.54.0 → Agentgateway 1.6.0 → ローカル Ollama で試し、提案・検証と別モデルの通信を記録した。別の認証試行では JWT なし 401、未知モデル 404、提案役とレビュー役の相互モデル要求 403 を確認した。 | モデル別認可設定での全段階再試行は提案役の240秒上限で停止し、二段階レビューは未完。Blue の定期実行は現在 Ollama に直結する。Developer 拡張のローカル Shell・ファイル操作は Gateway を通らない。 |
+| Agentgateway と Langfuse | Blue のモデル通信から局所 OTLP 検査受信器へ span を送信し、二段階の trace ID・親 span・モデル名を照合した。許可済み trace から限定した値だけの新しい OTLP を組む任意の中継を追加し、局所の偽受信器で本文・Tool出力が転送されないことを確認した。 | Langfuse 本体への保存・API 読戻しは未実行。現環境には本体 URL と project 鍵がない。局所の偽受信器による確認を実サービスの追跡成立と扱わない。 |
 | AGT | AGT 4.1.0 core の `govern()` は、既存の通常見積で明示した資料参照 Tool 4 個の実行前判断に使っている。AgentMesh Registry へ合成 Goose ID・版・owner・権能を登録し、版違いと失効後に登録情報の照合が不一致になることをローカル実行で確認した。 | Registry の試行はメモリ内で、照合処理も試行側にある。実 Goose 起動、資格確認、Gateway、Developer 拡張、GitHub 書込への強制は未接続。AGT 4.1.0 の `cryptography<49` 要求は、公開済み修正版50.0.0以降と衝突する。 |
 | GitHub 操作 | PR 候補の差分、局所の別モデルレビュー、対象 CVE の再走査、同一 head SHA を指定する保護付きマージのワークフローを実装した。 | 実 Dependabot alert からの自動選定、正式レビュー、保護 main への自動反映と反映後走査。 |
 
@@ -27,6 +27,8 @@ flowchart LR
 ```
 
 Agentgateway は**通過した**モデル・MCP 通信を認証・制御する。Langfuse は通信と判断経過を調べる保存先であり、Tool の許可や GitHub のマージを決定しない。AGT は明示的に接続した Tool の実行前判断と、AgentMesh の登録情報に使う。Goose の Developer 拡張はこの三者を通らないため、隔離 runner、外向き通信制限、差分範囲と検証を独立した強制条件にする。展示用 `demo.yaml` は権限台帳として使わない。
+
+本番の提案・レビュー Job はまだローカル Ollama へ直結している。接続先だけを Gateway に変えても、同じ runner 上の Goose Developer 拡張が Ollama ポートへ直接接続でき、認可を迂回する。実行ユーザーとネットワークを分け、Goose から見える宛先を Gateway のモデルポートに限定してから、本番 Job に短命 JWT を接続する。
 
 ## 新規 Agent の登録から停止まで
 
@@ -65,14 +67,16 @@ trace ID の一致だけで Tool の成功、業務への影響、マージ後�
 | [Goose 段階実行](goose-gateway-stage-run-20261114.json)（14:06–14:08 JST） | Goose が修正案を作成（95.9 秒）、検証・再走査で対象検出 0 件（20.6 秒）。Gateway ログは提案 8 要求、レビュー 3 要求を記録し、局所 OTLP で両 trace の親 span とモデル名を照合した。別モデルのレビュー回答は JSON として読めず停止した。 | `trialPassed=false`。この時点の設定は二つの JWT 主体をモデル別に分けていない。 |
 | [モデル別認可](goose-gateway-auth-20261114.json)（14:21 JST） | 修正版 PyJWT 2.15.1 と cryptography 50.0.2 を使い、JWT なし 401、未知モデル 404、提案役→レビューモデル 403、レビュー役→提案モデル 403 を再確認した。モデル一覧も役ごとに一つだけ返した。 | 認可試行は成功。この設定での Goose 全段階の結果は別の実行で確認する。 |
 | [モデル別認可を使った再試行](goose-gateway-second-failed-run-20261114.json)（14:20–14:24 JST） | Goose 案は構造検査で棄却され、固定手順で候補を作成した。再走査では対象検出 0 件。別 Goose は `REQUEST_CHANGES` を返し、publish 前に停止した。Gateway で役ごとのモデル拒否と両 trace を観測した。 | `trialPassed=false`。この試行は旧 Python 依存版を使用し、レビューの重複 JSON キー拒否を追加する前にレビュー処理が起動したため、受入証拠には採用しない。 |
+| [修正版依存と主体別認可での再試行](goose-gateway-proposal-timeout-20261114.json)（14:29–14:33 JST） | PyJWT 2.15.1・cryptography 50.0.2で起動。JWTなし401、未知モデル404、主体間の相互モデル要求403を再確認。提案役のモデル通信8要求と局所OTLP親spanを観測した。 | 提案役Gooseは240秒の上限で停止。候補検証と別レビューには進んでいない。保存結果の`unclassified_stage_failure`は試行器の分類不足であり、原因を「時間上限」と確認して修正する。 |
+| [中継実装後の認可再確認](goose-gateway-auth-final-20261114.json)（14:37 JST） | Langfuse鍵をGateway子プロセスへ渡さない環境でGatewayを起動し、JWTなし401、未知モデル404、両役のモデル越境403と役ごとの一覧を再確認した。 | `authorizationChecksPassed=true`。Gooseの提案・検証・レビューもLangfuse実送信も、この認可専用実行では行っていない。 |
 
-局所 OTLP 受信器は既知の本文属性名を検出しなかったが、全属性・イベント値の安全性は未監査である。Langfuse へ実送信する前に exporter の実データを別途監査する。運用担当は Gateway 記録から担当役とモデル要求を追える一方、レビューが不正な形式で止まったため、自動修正の所要時間や人手削減はまだ実測できない。
+局所 OTLP 受信器は既知の本文属性名を検出しなかったが、全属性・イベント値の安全性は未監査である。外部転送には受信した生spanを使わず、許可した trace と属性だけで新しいOTLPを組む。局所の偽Langfuse受信器では、本文・Tool出力を含む元spanからその値を除去して送信した。実Langfuseへの保存・読戻しは未確認である。運用担当は Gateway 記録から担当役とモデル要求を追える一方、全段階が完走していないため、自動修正の所要時間や人手削減はまだ実測できない。
 
 ## 次の受入条件
 
 1. 同じセキュリティ案件の修正・レビューの二つのモデル要求を専用 Gateway へ通し、JWT なし拒否、許可モデル、Gateway ログと局所 OTLP span の同一 run を照合する。Developer の操作は Gateway 外と表示する。
 2. AgentMesh の登録・版変更・失効を実起動前に照合し、未登録・停止中では Goose を起動しない。AGT の版と公式 API を固定し、試行結果で採否を決める。
-3. Langfuse v4 の到達先と project 鍵を用意し、本文を含まない OTLP を送って Observations API で同じ trace を読戻す。局所受信だけでは達成としない。
+3. Langfuse v4 の到達先と project 鍵を用意し、限定属性で再構築した OTLP を送って Observations API で同じ trace を読戻す。HTTP受理や局所の偽受信器だけでは達成としない。
 4. 隔離 runner、権限を分けた GitHub 資格、main 保護を有効にして、実 alert 一件の PR 作成から同一 head マージ・再走査までを確認する。モデルレビューの揺れ、実影響、人の判断を別に記録する。
 
 参考： [Agentgateway の観測](https://agentgateway.dev/docs/standalone/latest/documentation/observability/)、[Langfuse OTLP](https://langfuse.com/integrations/native/opentelemetry)、[AGT の制約](https://github.com/microsoft/agent-governance-toolkit/blob/v4.1.0/docs/LIMITATIONS.md)。

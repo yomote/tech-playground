@@ -26,7 +26,8 @@ import tempfile
 from threading import Lock, Thread
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener, urlopen
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -43,6 +44,7 @@ AUDIENCE = "playground-blue-goose-trial"
 MODELS = {"propose": "qwen3:8b", "review": "qwen3.5:35b"}
 OTLP_PATH = "/api/public/otel/v1/traces"
 MAX_OTLP_BYTES = 4 * 1024 * 1024
+MAX_SAFE_SPANS = 1000
 CASE_ID = re.compile(r"^BT-[0-9a-f]{16}$")
 KNOWN_CONTENT_PREFIXES = (
     "gen_ai.input.", "gen_ai.output.", "gen_ai.prompt", "gen_ai.completion",
@@ -130,6 +132,107 @@ def project_span(span) -> dict:
     }
 
 
+def add_string_attribute(attributes, key: str, value: str) -> None:
+    attribute = attributes.add()
+    attribute.key = key
+    attribute.value.string_value = value
+
+
+def safe_span(span, case_id: str, role: str):
+    """Create a new OTLP span; no source attribute, event or link is copied."""
+    clean = type(span)()
+    clean.trace_id = span.trace_id
+    clean.span_id = span.span_id
+    clean.parent_span_id = span.parent_span_id
+    clean.name = "blue-security-gateway-model"
+    clean.start_time_unix_nano = span.start_time_unix_nano
+    clean.end_time_unix_nano = span.end_time_unix_nano
+    clean.status.code = span.status.code
+    add_string_attribute(clean.attributes, "langfuse.trace.name", "blue-security-goose")
+    add_string_attribute(clean.attributes, "langfuse.trace.metadata.case_id", case_id)
+    add_string_attribute(clean.attributes, "langfuse.trace.metadata.agent_role", role)
+    for attribute in span.attributes:
+        key = attribute.key
+        value = attribute_value(attribute)
+        if key in ("gen_ai.request.model", "gen_ai.response.model"):
+            if isinstance(value, str) and value in MODELS.values():
+                add_string_attribute(clean.attributes, key, value)
+        elif key in ("gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens"):
+            if isinstance(value, int) and 0 <= value <= 10_000_000:
+                output = clean.attributes.add()
+                output.key = key
+                output.value.int_value = value
+        elif key in ("http.response.status_code", "http.status_code"):
+            if isinstance(value, int) and 100 <= value <= 599:
+                output = clean.attributes.add()
+                output.key = key
+                output.value.int_value = value
+    add_string_attribute(clean.attributes, "langfuse.observation.type",
+                         "generation" if any(a.key == "gen_ai.request.model"
+                                             for a in clean.attributes) else "span")
+    return clean
+
+
+def safe_batch(spans: list, trace_id: bytes, parent_id: bytes,
+               case_id: str, role: str) -> ExportTraceServiceRequest:
+    """Add one synthetic root so v4 can display the stage hierarchy."""
+    batch = ExportTraceServiceRequest()
+    resource = batch.resource_spans.add()
+    add_string_attribute(resource.resource.attributes, "service.name", "tech-playground-blue-security")
+    scope = resource.scope_spans.add()
+    scope.scope.name = "tech-playground-blue-security-relay"
+    root = scope.spans.add()
+    root.trace_id = trace_id
+    root.span_id = parent_id
+    root.name = f"blue-security-{role}"
+    root.start_time_unix_nano = min(span.start_time_unix_nano for span in spans)
+    root.end_time_unix_nano = max(span.end_time_unix_nano for span in spans)
+    add_string_attribute(root.attributes, "langfuse.trace.name", "blue-security-goose")
+    add_string_attribute(root.attributes, "langfuse.trace.metadata.case_id", case_id)
+    add_string_attribute(root.attributes, "langfuse.trace.metadata.agent_role", role)
+    add_string_attribute(root.attributes, "langfuse.observation.type", "agent")
+    for span in spans:
+        scope.spans.add().CopyFrom(span)
+    return batch
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        return None
+
+
+class LangfuseRelay:
+    def __init__(self, base_url: str, public_key: str, secret_key: str):
+        parsed = urlsplit(base_url)
+        if (not parsed.hostname or parsed.username or parsed.password or parsed.path not in ("", "/")
+                or parsed.query or parsed.fragment or parsed.scheme not in ("http", "https")
+                or (parsed.scheme == "http" and parsed.hostname not in
+                    ("localhost", "127.0.0.1", "::1"))):
+            raise ValueError("Langfuse URL must be an HTTPS origin or loopback HTTP origin")
+        self.endpoint = base_url.rstrip("/") + OTLP_PATH
+        self.authorization = "Basic " + base64.b64encode(
+            f"{public_key}:{secret_key}".encode()).decode()
+        self.opener = build_opener(ProxyHandler({}), NoRedirect())
+
+    def send(self, batch: ExportTraceServiceRequest) -> int | None:
+        request = Request(self.endpoint, data=batch.SerializeToString(), method="POST",
+                          headers={"Authorization": self.authorization,
+                                   "Content-Type": "application/x-protobuf",
+                                   "x-langfuse-ingestion-version": "4"})
+        try:
+            with self.opener.open(request, timeout=8) as response:
+                return response.status
+        except HTTPError as error:
+            return error.code
+        except (URLError, TimeoutError, OSError):
+            return None
+
+
+def langfuse_http_accepted(statuses: dict[str, int | None]) -> bool:
+    return set(statuses) == set(MODELS) and all(
+        status is not None and 200 <= status < 300 for status in statuses.values())
+
+
 class OtlpReceiver(ThreadingHTTPServer):
     def __init__(self, port: int, expected_auth: str):
         super().__init__(("127.0.0.1", port), OtlpHandler)
@@ -140,6 +243,9 @@ class OtlpReceiver(ThreadingHTTPServer):
         self.ingestion_v4 = True
         self.parse_errors = 0
         self.spans: list[dict] = []
+        self.safe_spans: list = []
+        self.allowed_traces: dict[bytes, tuple[str, str, bytes]] = {}
+        self.safe_span_overflow = False
 
 
 class OtlpHandler(BaseHTTPRequestHandler):
@@ -162,8 +268,9 @@ class OtlpHandler(BaseHTTPRequestHandler):
         batch = ExportTraceServiceRequest()
         try:
             batch.ParseFromString(self.rfile.read(size))
-            spans = [project_span(span) for resource in batch.resource_spans
-                     for scope in resource.scope_spans for span in scope.spans]
+            raw_spans = [span for resource in batch.resource_spans
+                         for scope in resource.scope_spans for span in scope.spans]
+            spans = [project_span(span) for span in raw_spans]
         except Exception:
             with self.server.lock:
                 self.server.parse_errors += 1
@@ -172,6 +279,14 @@ class OtlpHandler(BaseHTTPRequestHandler):
         with self.server.lock:
             self.server.requests += 1
             self.server.spans.extend(spans)
+            for span in raw_spans:
+                context = self.server.allowed_traces.get(span.trace_id)
+                if context and len(span.trace_id) == 16 and len(span.span_id) == 8:
+                    if len(self.server.safe_spans) >= MAX_SAFE_SPANS:
+                        self.server.safe_span_overflow = True
+                    else:
+                        case_id, role, _parent_id = context
+                        self.server.safe_spans.append(safe_span(span, case_id, role))
         payload = ExportTraceServiceResponse().SerializeToString()
         self.send_response(200)
         self.send_header("content-type", "application/x-protobuf")
@@ -312,6 +427,30 @@ def stage_env(model: str, token: str, port: int, trace_id: str, parent_id: str,
     return env
 
 
+def gateway_child_env() -> dict[str, str]:
+    # The Gateway only needs local loopback access. In particular, do not
+    # inherit the optional Langfuse project keys held by this relay process.
+    return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "HOME": str(Path.home()), "LANG": "C.UTF-8",
+            "NO_PROXY": "127.0.0.1,localhost", "no_proxy": "127.0.0.1,localhost"}
+
+
+def public_stage_reason(raw: str) -> tuple[str, bool]:
+    """Classify only a known fixed process marker; never publish free-form output."""
+    process_labels = ("goose_proposal_failed", "canonical_pnpm_failed",
+                      "verification_check_failed", "rescan_failed", "review_goose_failed")
+    marker = re.fullmatch(
+        r"(goose_proposal_failed|canonical_pnpm_failed|verification_check_failed|"
+        r"rescan_failed|review_goose_failed):exit=-?\d+:timedOut=(true|false):"
+        r"stdoutBytes=\d+:stderrBytes=\d+", raw)
+    if marker and marker.group(1) in process_labels:
+        label, timed_out = marker.groups()
+        return (label.removesuffix("_failed") + "_timeout", True) if timed_out == "true" else (label, False)
+    if re.fullmatch(r"[a-z0-9_]{1,80}", raw):
+        return raw, False
+    return "unclassified_stage_failure", False
+
+
 def run_stage(argv: list[str], env: dict[str, str], out: Path) -> dict:
     started = time.monotonic()
     # security_loop owns timeouts and teardown for its detached Goose/check
@@ -326,8 +465,7 @@ def run_stage(argv: list[str], env: dict[str, str], out: Path) -> dict:
               "status": doc.get("status", "missing_result")}
     if isinstance(doc.get("reason"), str):
         # An untrusted reviewer can put patch or prompt text in a free-form reason.
-        result["reason"] = (doc["reason"] if re.fullmatch(r"[a-z0-9_]{1,80}", doc["reason"])
-                            else "unclassified_stage_failure")
+        result["reason"], result["timedOut"] = public_stage_reason(doc["reason"])
     if doc.get("producer"):
         result["producer"] = doc["producer"]
     if doc.get("patchSha256"):
@@ -364,7 +502,19 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--authorization-only", action="store_true",
                         help="check Gateway JWT/model policy without running Goose")
+    parser.add_argument("--langfuse-url",
+                        help="optional Langfuse origin; requires project keys in environment")
     args = parser.parse_args()
+    relay = None
+    if args.langfuse_url:
+        public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
+        secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
+        if not public_key or not secret_key:
+            parser.error("Langfuse project keys are required in the environment")
+        try:
+            relay = LangfuseRelay(args.langfuse_url, public_key, secret_key)
+        except ValueError as error:
+            parser.error(str(error))
     if not 60 <= args.timeout <= 600:
         parser.error("--timeout must be 60..600")
     if len({args.model_port, args.otlp_port, args.admin_port}) != 3 or not all(
@@ -388,6 +538,8 @@ def main() -> int:
               "modelCatalog": list(MODELS.values()),
               "otlpRecipient": "local_inspection_receiver",
               "receiverIsLangfuse": False, "langfuseReadbackConfirmed": False,
+              "langfuseExportConfigured": bool(relay),
+              "langfuseExportHttpAccepted": False,
               "developerToolGovernedByGateway": False,
               "runIdHeaderIsAuthorization": False,
               "allOtlpAttributesProvenSafe": False, "publishable": False,
@@ -415,7 +567,8 @@ def main() -> int:
             write_private(config_file, gateway_config(jwks_file, args.model_port,
                                                       args.otlp_port, args.admin_port, otlp_auth))
             valid = subprocess.run([str(args.gateway), "--validate-only", "-f", str(config_file)],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15,
+                                   env=gateway_child_env())
             result["checks"]["gatewayConfigValid"] = valid.returncode == 0
             if valid.returncode:
                 return finish(args.output, result)
@@ -425,7 +578,7 @@ def main() -> int:
             with log_file.open("wb") as log:
                 gateway = subprocess.Popen([str(args.gateway), "-f", str(config_file)],
                                            stdout=log, stderr=subprocess.STDOUT,
-                                           start_new_session=True)
+                                           start_new_session=True, env=gateway_child_env())
                 if not await_port(args.model_port, gateway):
                     result["checks"]["gatewayStarted"] = False
                     return finish(args.output, result)
@@ -457,6 +610,11 @@ def main() -> int:
                     return finish(args.output, result)
                 trace_meta = {stage: (secrets.token_hex(16), secrets.token_hex(8))
                               for stage in MODELS}
+                with receiver.lock:
+                    receiver.allowed_traces = {
+                        bytes.fromhex(trace_id): (case["caseId"], stage,
+                                                   bytes.fromhex(parent_id))
+                        for stage, (trace_id, parent_id) in trace_meta.items()}
                 loop = Path(__file__).with_name("security_loop.py")
                 proposal, verification, review = (temp / f"{name}.json" for name in
                                                   ("proposal", "verification", "review"))
@@ -493,8 +651,22 @@ def main() -> int:
             result["checks"]["gatewayModelRequests"] = gateway_counts(log_file)
             with receiver.lock:
                 spans = list(receiver.spans)
+                safe_spans = list(receiver.safe_spans)
+                overflow = receiver.safe_span_overflow
                 result["checks"]["otlpHttpRequests"] = receiver.requests
                 result["checks"]["otlpParseErrors"] = receiver.parse_errors
+            result["checks"]["safeSpanOverflow"] = overflow
+            if relay and not overflow:
+                statuses = {}
+                for stage, (trace_id, parent_id) in trace_meta.items():
+                    selected = [span for span in safe_spans
+                                if span.trace_id == bytes.fromhex(trace_id)]
+                    if selected:
+                        batch = safe_batch(selected, bytes.fromhex(trace_id),
+                                           bytes.fromhex(parent_id), case["caseId"], stage)
+                        statuses[stage] = relay.send(batch)
+                result["checks"]["langfuseExportHttpStatuses"] = statuses
+                result["langfuseExportHttpAccepted"] = langfuse_http_accepted(statuses)
             result["checks"]["anyKnownContentAttributeNameSeen"] = any(
                 span["knownContentAttributeNameSeen"] for span in spans)
             for stage in MODELS:
@@ -514,6 +686,7 @@ def main() -> int:
                     for stage in MODELS),
                 receiver.requests > 0, receiver.parse_errors == 0,
                 not result["checks"]["anyKnownContentAttributeNameSeen"],
+                not relay or result["langfuseExportHttpAccepted"],
             ))
     finally:
         stop_group(gateway)
