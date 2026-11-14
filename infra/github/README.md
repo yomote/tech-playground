@@ -35,7 +35,7 @@ workflowの実行Gateはrepository variable `BLUE_SECURITY_ENABLED`です。既�
 
 **自動マージは未実証です。** `BLUE_POLICY_TOKEN`が未設定またはrulesetの書込権限を持たず、GitHubのGETが`bypass_actors`を返さない場合、workflowはdraft PRのまま停止します。このtokenは設定変更も可能な権限を持つため、設定管理者は保管と利用履歴を管理する必要があります。BotへAdministration権限は付けません。現時点のmain rulesetは未適用でauto-mergeも無効のため、実サービスのauto-mergeは実行していません。
 
-条件を確認した後、**二段階で適用**します。最初に`enable_main_ruleset=true`・`enable_security_auto_merge=false`でplan/applyし、リモートのactive ruleset・4 check・承認規則・bypass actor空をAPIで読戻します。次に`enable_security_auto_merge=true`のplan/applyを行い、repo設定を再読込します。両方を同じapplyで初めてtrueにすると、Terraformの操作順によって一時的にauto-mergeだけが有効になり得るため、避けます。停止時は逆にauto-mergeをfalseにして読戻した後、必要ならrulesetを変更します。PRごとのauto-merge設定には`gh pr merge <number> --auto --squash --match-head-commit <head-sha>`を使い、`--admin`やruleset bypassは使いません。workflowはマージコミットをOSVで再走査します。GitHub上のDependabot alert状態とmainの別CI結果は、その後に確認します。
+条件を確認した後、**二段階で適用**します。最初に`enable_main_ruleset=true`・`enable_security_auto_merge=false`でplan/applyし、リモートのactive ruleset・4 check・承認規則・bypass actor空をAPIで読戻します。次に`enable_security_auto_merge=true`のplan/applyを行い、repo設定を再読込します。両方を同じapplyで初めてtrueにすると、Terraformの操作順によって一時的にauto-mergeだけが有効になり得るため、避けます。停止時は逆にauto-mergeをfalseにして読戻した後、必要ならrulesetを変更します。PRごとのauto-merge設定にはGitHub GraphQLの`enablePullRequestAutoMerge`と`expectedHeadOid`を使い、`gh pr merge`の即時マージ経路、`--admin`、ruleset bypassは使いません。保護規則は設定直前に再読込しますが、管理者による規則変更との競合を完全に原子的には防げません。workflowはマージコミットをOSVで再走査します。GitHub上のDependabot alert状態とmainの別CI結果は、その後に確認します。
 
 確認するGitHub APIの例です。`PR_HEAD_SHA`は対象PRの最新head SHAに置き換えます。
 
@@ -113,6 +113,6 @@ CIにはGitHub管理tokenを渡さず、宣言の検証だけを行います。�
 - [GitHub rulesets availability](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)
 - [Available rules for rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)
 - [Automatically merging a pull request](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/automatically-merging-a-pull-request)
-- [GitHub CLI `gh pr merge`](https://cli.github.com/manual/gh_pr_merge)
+- [GitHub GraphQL `enablePullRequestAutoMerge`](https://docs.github.com/en/graphql/reference/pulls#enablepullrequestautomerge)
 - [Ruleset GETで返るbypass actorの権限条件](https://docs.github.com/en/rest/repos/rules#get-a-repository-ruleset)
 - [Actions `GITHUB_TOKEN` and triggered workflows](https://docs.github.com/en/actions/concepts/security/github_token)
