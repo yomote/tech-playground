@@ -116,6 +116,13 @@ class SecurityLoopTest(unittest.TestCase):
         ])
         return code, json.loads(path.read_text())
 
+    def test_gateway_correlation_header_is_not_passed_to_build_checks(self) -> None:
+        with patch.dict(os.environ, {"OPENAI_CUSTOM_HEADERS": "X-Playground-Run-Id=case-123"}):
+            goose_env = loop.child_env(self.root / "goose-home")
+            check_env = loop.verification_env(self.root / "check-home")
+        self.assertEqual(goose_env["OPENAI_CUSTOM_HEADERS"], "X-Playground-Run-Id=case-123")
+        self.assertNotIn("OPENAI_CUSTOM_HEADERS", check_env)
+
     def test_select_matching_osv_and_dependabot(self) -> None:
         code, result = self.select()
         self.assertEqual(code, 0)

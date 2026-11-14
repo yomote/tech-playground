@@ -66,3 +66,31 @@ Goose修正実行にはGitHub tokenを渡さず、一時HOME・`GOOSE_PATH_ROOT`
 焦点検査：`python3 -m unittest discover -s demos/blue-team-agent -p 'test_security_loop.py' -v`。テストのGooseとscannerは偽実行体であり、実CVEの修正や隔離の安全性を示さない。
 
 2026-11-14のローカル検証では、GitHub main `f715deb`から別worktreeを作り、`body-parser`の`2.4.0` overrideを追加してpnpm 11.19.0で再計算した2,574バイトの差分（`qs`の依存更新を含む）が構造ガードを通った。同日のGoose候補でworkspaceの`apps/*`と`allowBuilds`、lockfileのimporterを削った55,142バイトの差分は拒否した。これは**ローカルの合成alertによる候補検査**であり、実GitHub alertを選定した証拠でもPR反映の証拠でもない。
+
+## Agentgateway経由のモデル通信試行
+
+`gateway_trial.py`は、`propose`と`review`のGooseモデル通信を、JWTを要求するAgentgateway 1.6.0へ通す。許可モデルは`qwen3:8b`と`qwen3.5:35b`の二つで、JWT subject別の[モデル認可規則](https://agentgateway.dev/docs/standalone/latest/documentation/configuration/security/http-authz/)を付け、ローカルOllamaへ転送する。`verify`はモデルを呼ばない。GatewayのOTLP出力はローカルの検査受信器で受け、case IDに結び付けたtrace ID、親span、モデル名、Gatewayが記録したJWT subject別の要求数だけを保存する。受信器は**Langfuse本体ではない**。`X-Playground-Run-Id`と`traceparent`は相関用ヘッダーであり、認可の根拠にはしない。
+
+実行にはPython 3.12以上と[`requirements-control-plane-trial.txt`](requirements-control-plane-trial.txt)のPythonパッケージ、固定版Goose 1.54.0、Agentgateway 1.6.0、OSV-Scanner 2.7.0、ローカルOllamaの上記二モデル、Node 22とpnpm 11.19.0が要る。入力caseと`--repo`は同じmain commitを指し、checkoutは清潔でなければならない。ポート16520、16522、16523を空けてから実行する。
+
+```bash
+python demos/blue-team-agent/gateway_trial.py \
+  --repo /path/to/clean-main-checkout \
+  --case /path/to/case.json \
+  --goose /path/to/goose-v1.54.0-linux-amd64 \
+  --gateway /path/to/agentgateway-v1.6.0-linux-amd64 \
+  --scanner /path/to/osv-scanner-v2.7.0-linux-amd64 \
+  --output .artifacts/blue-goose-gateway-trial.json
+```
+
+CLIは秘密鍵、JWT、プロンプト、patch本文、raw span、Gatewayログを一時領域から外へ保存しない。GooseのDeveloper拡張によるローカルのファイル・shell操作はGatewayを通らず、隔離や統制の実証にはならない。試行結果はPR作成・別主体のGitHubレビュー・mergeの証拠にもならない。
+
+`agentmesh_trial.py`は、AGT 4.1.0のAgentMesh Registryへ合成Agentを登録し、版違いと失効後に登録メタデータが一致しなくなることを確認する。`python demos/blue-team-agent/agentmesh_trial.py`で実行できる。Registryはメモリ内で、資格情報は未検証のfixtureである。結果の`metadata_match=true`はGoose起動の許可ではない。実起動の制御、永続化、GatewayとToolへの主体連携は[統制設計と受入条件](../../docs/ai-platform-v38/goose-security-control-plane-20261114.md)に残している。
+
+`--authorization-only`はGooseを起動せず、JWTなし、未登録モデル、主体に許可していないモデルの拒否を確認する。OTLP検査で報告する「本文属性名なし」は既知の属性名に限った観測であり、**全属性の安全性は未確認**。本文を扱う別の属性名が増える場合は受信前の設定と全属性を改めて確認する。`trialPassed`はGoose自身が候補を作成し、検証と別レビューが通り、既知の本文属性名を観測しない場合だけ真になる。
+
+認可だけの再現コマンドは次のとおり。2026-11-14の実測では、JWTなし401、未登録モデル404、propose主体からreviewモデル403、review主体からproposeモデル403だった。別の全段階試行ではGoose自身の候補作成と再走査は通ったが、reviewが指定JSONを返さず`trialPassed: false`となった。Langfuse本体への接続・読戻しは未実施である。
+
+```bash
+python demos/blue-team-agent/gateway_trial.py --repo /path/to/clean-main-checkout --case /path/to/case.json --goose /path/to/goose-v1.54.0-linux-amd64 --gateway /path/to/agentgateway-v1.6.0-linux-amd64 --scanner /path/to/osv-scanner-v2.7.0-linux-amd64 --output .artifacts/blue-goose-gateway-auth.json --authorization-only
+```

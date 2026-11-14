@@ -353,7 +353,7 @@ def child_env(root: Path) -> dict[str, str]:
         "GIT_EXEC_PATH": git_exec_path(),
     }
     for key in ("GOOSE_PROVIDER", "GOOSE_MODEL", "OPENAI_HOST", "OPENAI_BASE_PATH",
-                "OPENAI_API_KEY", "OLLAMA_HOST", "NO_PROXY", "no_proxy"):
+                "OPENAI_API_KEY", "OPENAI_CUSTOM_HEADERS", "OLLAMA_HOST", "NO_PROXY", "no_proxy"):
         if key in os.environ:
             env[key] = os.environ[key]
     return env
@@ -362,7 +362,7 @@ def child_env(root: Path) -> dict[str, str]:
 def verification_env(root: Path) -> dict[str, str]:
     env = child_env(root)
     for key in ("GOOSE_PROVIDER", "GOOSE_MODEL", "OPENAI_HOST", "OPENAI_BASE_PATH",
-                "OPENAI_API_KEY", "OLLAMA_HOST"):
+                "OPENAI_API_KEY", "OPENAI_CUSTOM_HEADERS", "OLLAMA_HOST"):
         env.pop(key, None)
     return env
 

@@ -1,0 +1,40 @@
+{
+  "allOtlpAttributesProvenSafe": false,
+  "authorizationChecksPassed": true,
+  "baseSha": "f715deb90150d3fcfe510fd2e7b8f373ca0a8d5f",
+  "caseId": "BT-940932b72f84f6b5",
+  "caseSha256": "103dcd3547721c39b3f993ee82c87c14a14ea3f88808b5013df079ac5da02752",
+  "checks": {
+    "gatewayConfigValid": true,
+    "gatewayStarted": true,
+    "proposeTokenReviewModelStatus": 403,
+    "proposeVisibleModels": [
+      "qwen3:8b"
+    ],
+    "proposeVisibleModelsStatus": 200,
+    "reviewTokenProposeModelStatus": 403,
+    "reviewVisibleModels": [
+      "qwen3.5:35b"
+    ],
+    "reviewVisibleModelsStatus": 200,
+    "subjectModelIsolationConfirmed": true,
+    "unknownModelHttpStatus": 404,
+    "withoutJwtHttpStatus": 401
+  },
+  "completedAtUtc": "2026-11-14T05:12:57.920462+00:00",
+  "developerToolGovernedByGateway": false,
+  "gatewayVersion": "1.6.0",
+  "gooseVersion": "1.54.0",
+  "langfuseReadbackConfirmed": false,
+  "modelCatalog": [
+    "qwen3:8b",
+    "qwen3.5:35b"
+  ],
+  "otlpRecipient": "local_inspection_receiver",
+  "publishable": false,
+  "receiverIsLangfuse": false,
+  "runIdHeaderIsAuthorization": false,
+  "stages": {},
+  "startedAtUtc": "2026-11-14T05:12:57.800754+00:00",
+  "traces": {}
+}
