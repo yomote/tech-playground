@@ -1,10 +1,6 @@
 id: agent-definition-contract
 title: Goose・MAF定義の登録と実行前判定を隔離環境で試す
-kind: technical-demo
 status: exploring
-audience: Agent開発者、基盤運用者
-scope: Goose・MAF方式の定義を共通形式で検査し、隔離Git版に固定してSQLiteへ登録・再読込する。合成権限による実行前判定と停止後拒否まで試す。
-implementation: PyYAMLとJSON Schemaで形式を検査し、Git commitとartifactのOIDを照合してSQLiteへ保存する。runner・認証基盤・Gatewayへの接続はない。
 summary: 二方式の定義を同じ台帳に登録し、配備設定ごとの許可外Tool・要求者・停止状態を実行前に拒否する局所試行。Agentの実行や実権限の認可ではない。
 goal: Agentを自由に作るための宣言項目と、環境別の実行許可を分ける。
 questions:
@@ -14,7 +10,6 @@ questions:
   - Git版と定義の版を固定して台帳から再読込できるか
   - 許可外Tool、別の要求者、停止した配備設定を新規要求で拒否できるか
 tags: [agent-platform, registry, goose, maf, contract]
-relatedDemos: [goose-gateway-fga-showcase, maf-magentic-scrum]
 stack: [python, pyyaml, jsonschema]
 findings:
   - 隔離されたローカル台帳と実行前判定の実装。既定のartifactは非実行fixtureであり、実Agentの動作証拠ではない。
