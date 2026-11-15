@@ -1,0 +1,22 @@
+id: agent-definition-contract
+title: Goose・MAF定義の登録と実行前判定を隔離環境で試す
+status: exploring
+summary: 二方式の定義を同じ台帳に登録し、配備設定ごとの許可外Tool・要求者・停止状態を実行前に拒否する局所試行。Agentの実行や実権限の認可ではない。
+goal: Agentを自由に作るための宣言項目と、環境別の実行許可を分ける。
+questions:
+  - GooseとMAFの定義が同じ形式で記述できるか
+  - 秘密値欄と任意の起動コマンドを形式段階で拒否できるか
+  - 入出力schema参照を相対パスに限定できるか
+  - Git版と定義の版を固定して台帳から再読込できるか
+  - 許可外Tool、別の要求者、停止した配備設定を新規要求で拒否できるか
+tags: [agent-platform, registry, goose, maf, contract]
+stack: [python, pyyaml, jsonschema]
+findings:
+  - 隔離されたローカル台帳と実行前判定の実装。既定のartifactは非実行fixtureであり、実Agentの動作証拠ではない。
+  - 要求者と操作者の文字列は未認証。実Toolへの強制、稼働中runの停止、共通実行APIは未実装。
+references:
+  - https://goose-docs.ai/docs/guides/context-engineering/custom-agents/
+  - https://learn.microsoft.com/en-us/agent-framework/workflows/
+  - https://json-schema.org/draft/2020-12
+createdAt: 2026-11-15
+updatedAt: 2026-11-15

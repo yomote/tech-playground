@@ -1,0 +1,2 @@
+Registry admission fixture for the Goose family.
+This is not a runnable Goose Agent or a CVE investigator.

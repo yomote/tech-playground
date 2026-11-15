@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tech-playground.dev/schemas/agent-definition-v0.json",
+  "title": "Tech Playground AgentDefinition v0",
+  "description": "A declaration of an agent implementation and requested capabilities; validation does not register or authorize execution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": { "const": "tech-playground.dev/agent/v0" },
+    "kind": { "const": "AgentDefinition" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agentId", "version", "ownerRef"],
+      "properties": {
+        "agentId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+        "useCaseId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+        "version": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$" },
+        "ownerRef": { "type": "string", "pattern": "^(?:team|user)/[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purpose", "implementation", "requestedCapabilities"],
+      "properties": {
+        "purpose": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "implementation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["family", "repository", "revision", "path"],
+          "properties": {
+            "family": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+            "repository": { "type": "string", "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*/[A-Za-z0-9_-][A-Za-z0-9._-]*$" },
+            "revision": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+            "path": { "$ref": "#/$defs/relativePath" }
+          }
+        },
+        "inputSchemaRef": { "$ref": "#/$defs/relativeJsonRef" },
+        "outputSchemaRef": { "$ref": "#/$defs/relativeJsonRef" },
+        "requestedCapabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["modelRoutes", "tools"],
+          "properties": {
+            "modelRoutes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/capabilityName" }
+            },
+            "tools": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/capabilityName" }
+            }
+          }
+        },
+        "evaluationRef": { "$ref": "#/$defs/relativeJsonRef" }
+      }
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "pattern": "^(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*[A-Za-z0-9_-][A-Za-z0-9._-]*$"
+    },
+    "relativeJsonRef": {
+      "type": "string",
+      "pattern": "^(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\\.json$"
+    },
+    "capabilityName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    }
+  }
+}

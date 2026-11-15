@@ -1,0 +1,20 @@
+apiVersion: tech-playground.dev/agent/v0
+kind: AgentDefinition
+metadata:
+  agentId: cve-investigator-goose
+  useCaseId: cve-investigation
+  version: 0.1.0
+  ownerRef: team/security
+spec:
+  purpose: 合成CVE案件の依存関係と到達性を読み、根拠付きの調査結果を返す
+  implementation:
+    family: goose
+    repository: example/security-agents
+    revision: '1111111111111111111111111111111111111111'
+    path: agents/cve-investigator-goose
+  inputSchemaRef: schemas/cve-case-input.json
+  outputSchemaRef: schemas/cve-case-output.json
+  requestedCapabilities:
+    modelRoutes: [local-analysis]
+    tools: [github.read, osv.read]
+  evaluationRef: evals/cve-case-v1.json
