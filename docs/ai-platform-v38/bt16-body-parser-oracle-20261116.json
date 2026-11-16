@@ -1,0 +1,105 @@
+{
+  "observedAtUtc": "2026-11-16T07:25:13.272897+00:00",
+  "case": "GitHub_PR_16_body_parser",
+  "scope": "local_HTTP_OpenFGA_mock_exact_checkouts",
+  "input": {
+    "normalSha256": "1c86b6a59675d41c877a94aafd57883cd578910e3abfcc4ef73b7a2f2ea9c925",
+    "malformedSha256": "939ebd476bcc88da750f4916e15ccc0cbf5a51aa3aad11bb8b21fdb242adea1a",
+    "malformedBytes": 102477
+  },
+  "variants": {
+    "baseline": {
+      "head": "f715deb90150d3fcfe510fd2e7b8f373ca0a8d5f",
+      "sourceSha256": "e48b634aef7bba112f1a91fcf3b43ea675743baa2def740dcc5e7ff108798227",
+      "lockfileSha256": "4f36dcb0f5dbc487bc42512cebc85cb9c092ae075c8a52a1ac013dac375874eb",
+      "installed": {
+        "express": "5.2.1",
+        "bodyParser": "2.3.0"
+      },
+      "normal": {
+        "http": 200,
+        "mode": "mock",
+        "allowed": true,
+        "elapsedMs": 7.7
+      },
+      "normalGzip": {
+        "http": 200,
+        "mode": "mock",
+        "allowed": true,
+        "elapsedMs": 1.89
+      },
+      "malformedGzip": {
+        "http": 200,
+        "mode": "mock",
+        "allowed": true,
+        "elapsedMs": 0.87
+      },
+      "afterMalformed": {
+        "alive": false,
+        "exitCode": 1
+      },
+      "normalAfterMalformed": null,
+      "mockStateUnchanged": null,
+      "serverLogSha256": "d994a220d0a59a3e5829b3d45a4fe26565e586daf730a41fb9483408b8572697",
+      "uncaughtZDataError": true
+    },
+    "candidate": {
+      "head": "289e575279b3e6c7f666f0dc328c786d3d982525",
+      "sourceSha256": "e48b634aef7bba112f1a91fcf3b43ea675743baa2def740dcc5e7ff108798227",
+      "lockfileSha256": "0cf13976948577ab4d1fc1e636dbb928164c70da228f10a91d87c60cad9e8690",
+      "installed": {
+        "express": "5.2.1",
+        "bodyParser": "2.4.0"
+      },
+      "normal": {
+        "http": 200,
+        "mode": "mock",
+        "allowed": true,
+        "elapsedMs": 6.76
+      },
+      "normalGzip": {
+        "http": 200,
+        "mode": "mock",
+        "allowed": true,
+        "elapsedMs": 1.78
+      },
+      "malformedGzip": {
+        "http": 200,
+        "mode": "mock",
+        "allowed": true,
+        "elapsedMs": 1.02
+      },
+      "afterMalformed": {
+        "alive": true,
+        "exitCode": null
+      },
+      "normalAfterMalformed": {
+        "http": 200,
+        "mode": "mock",
+        "allowed": true,
+        "elapsedMs": 1.79
+      },
+      "mockStateUnchanged": true,
+      "serverLogSha256": "cc7e63816096d3bad7c3ffce5403d0b90c8c39c8e59536c4481e0f7d591ea0c8",
+      "uncaughtZDataError": false
+    }
+  },
+  "acceptedScope": "same_local_HTTP_payload_crashes_baseline_only",
+  "notProven": [
+    "deployed_impact",
+    "real_OpenFGA_behavior",
+    "formal_PR_review",
+    "merge",
+    "post_merge_rescan"
+  ],
+  "conditions": {
+    "heads_match": true,
+    "same_http_source": true,
+    "same_express_version": true,
+    "dependency_pair": true,
+    "normal_requests": true,
+    "malformed_reaches_route": true,
+    "baseline_crash": true,
+    "candidate_survives": true
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "allOtlpAttributesProvenSafe": false,
+  "baseSha": "f715deb90150d3fcfe510fd2e7b8f373ca0a8d5f",
+  "caseId": "BT-940932b72f84f6b5",
+  "caseSha256": "103dcd3547721c39b3f993ee82c87c14a14ea3f88808b5013df079ac5da02752",
+  "checks": {
+    "anyKnownContentAttributeNameSeen": false,
+    "gatewayConfigValid": true,
+    "gatewayModelRequests": {
+      "propose": {
+        "modelNames": [
+          "qwen3:8b"
+        ],
+        "requests": 7,
+        "statusCodes": [
+          404,
+          403,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "successes": 5
+      },
+      "review": {
+        "modelNames": [
+          "qwen3.5:35b"
+        ],
+        "requests": 5,
+        "statusCodes": [
+          403,
+          200,
+          200,
+          200
+        ],
+        "successes": 3
+      }
+    },
+    "gatewayStarted": true,
+    "otlpHttpRequests": 6,
+    "otlpParseErrors": 0,
+    "proposeTokenReviewModelStatus": 403,
+    "proposeVisibleModels": [
+      "qwen3:8b"
+    ],
+    "proposeVisibleModelsStatus": 200,
+    "reviewTokenProposeModelStatus": 403,
+    "reviewVisibleModels": [
+      "qwen3.5:35b"
+    ],
+    "reviewVisibleModelsStatus": 200,
+    "safeSpanOverflow": false,
+    "subjectModelIsolationConfirmed": true,
+    "unknownModelHttpStatus": 404,
+    "withoutJwtHttpStatus": 401
+  },
+  "completedAtUtc": "2026-11-14T06:36:17.075019+00:00",
+  "developerToolGovernedByGateway": false,
+  "gatewayVersion": "1.6.0",
+  "gooseVersion": "1.54.0",
+  "langfuseExportConfigured": false,
+  "langfuseExportHttpAccepted": false,
+  "langfuseReadbackConfirmed": false,
+  "modelCatalog": [
+    "qwen3:8b",
+    "qwen3.5:35b"
+  ],
+  "otlpRecipient": "local_inspection_receiver",
+  "publishable": false,
+  "receiverIsLangfuse": false,
+  "runIdHeaderIsAuthorization": false,
+  "stages": {
+    "propose": {
+      "durationMs": 61654,
+      "exitCode": 0,
+      "patchSha256": "af4e75d75b58667e1fa8881e6be83af48e39e09027117b3bfa6dc4f950626f88",
+      "producer": "deterministic_fallback_after_goose_rejection",
+      "status": "proposed",
+      "timedOut": false
+    },
+    "review": {
+      "durationMs": 78340,
+      "exitCode": 0,
+      "patchSha256": "af4e75d75b58667e1fa8881e6be83af48e39e09027117b3bfa6dc4f950626f88",
+      "reviewerVerdict": "APPROVE",
+      "status": "reviewed",
+      "timedOut": false
+    },
+    "verify": {
+      "durationMs": 17709,
+      "exitCode": 0,
+      "patchSha256": "af4e75d75b58667e1fa8881e6be83af48e39e09027117b3bfa6dc4f950626f88",
+      "status": "verified",
+      "targetFindingRows": 0,
+      "timedOut": false
+    }
+  },
+  "startedAtUtc": "2026-11-14T06:33:31.729959+00:00",
+  "traces": {
+    "propose": {
+      "expectedModelObserved": true,
+      "knownContentAttributeNameSeen": false,
+      "parentLinked": true,
+      "spanCount": 7,
+      "traceId": "7eb182faed1a8e6be47dac1040a5c59c"
+    },
+    "review": {
+      "expectedModelObserved": true,
+      "knownContentAttributeNameSeen": false,
+      "parentLinked": true,
+      "spanCount": 5,
+      "traceId": "93f6ffb4a4d8021467ae9b6dd13f790c"
+    }
+  },
+  "trialPassed": false
+}

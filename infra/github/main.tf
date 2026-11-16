@@ -8,7 +8,7 @@ resource "github_repository" "project" {
   allow_squash_merge          = true
   allow_merge_commit          = false
   allow_rebase_merge          = false
-  allow_auto_merge            = false
+  allow_auto_merge            = var.enable_security_auto_merge
   allow_update_branch         = true
   delete_branch_on_merge      = true
   squash_merge_commit_title   = "PR_TITLE"
@@ -17,6 +17,10 @@ resource "github_repository" "project" {
 
   lifecycle {
     prevent_destroy = true
+    precondition {
+      condition     = !var.enable_security_auto_merge || var.enable_main_ruleset
+      error_message = "Auto-merge requires the active main ruleset with independent review and CI checks."
+    }
   }
 }
 
@@ -72,22 +76,35 @@ resource "github_repository_ruleset" "main" {
     }
   }
 
-  # Solo development: no impossible self-approval requirement; no administrator bypass.
+  # An independent actor must approve the latest reviewable push. No bypass actors.
   rules {
     deletion                = true
     non_fast_forward        = true
     required_linear_history = true
     pull_request {
-      required_approving_review_count   = 0
+      allowed_merge_methods             = ["squash"]
+      required_approving_review_count   = 1
       required_review_thread_resolution = true
       dismiss_stale_reviews_on_push     = true
       require_code_owner_review         = false
-      require_last_push_approval        = false
+      require_last_push_approval        = true
     }
     required_status_checks {
       strict_required_status_checks_policy = true
       required_check {
         context        = "readiness"
+        integration_id = 15368
+      }
+      required_check {
+        context        = "github-settings-check"
+        integration_id = 15368
+      }
+      required_check {
+        context        = "osv-pnpm"
+        integration_id = 15368
+      }
+      required_check {
+        context        = "blue-security-verify"
         integration_id = 15368
       }
     }

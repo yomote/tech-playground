@@ -1,0 +1,87 @@
+{
+  "allOtlpAttributesProvenSafe": false,
+  "baseSha": "f715deb90150d3fcfe510fd2e7b8f373ca0a8d5f",
+  "caseId": "BT-940932b72f84f6b5",
+  "caseSha256": "103dcd3547721c39b3f993ee82c87c14a14ea3f88808b5013df079ac5da02752",
+  "checks": {
+    "anyKnownContentAttributeNameSeen": false,
+    "gatewayConfigValid": true,
+    "gatewayModelRequests": {
+      "propose": {
+        "modelNames": [
+          "qwen3:8b"
+        ],
+        "requests": 8,
+        "statusCodes": [
+          404,
+          403,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "successes": 6
+      },
+      "review": {
+        "modelNames": [],
+        "requests": 2,
+        "statusCodes": [
+          403,
+          200
+        ],
+        "successes": 1
+      }
+    },
+    "gatewayStarted": true,
+    "otlpHttpRequests": 5,
+    "otlpParseErrors": 0,
+    "proposeTokenReviewModelStatus": 403,
+    "proposeVisibleModels": [
+      "qwen3:8b"
+    ],
+    "proposeVisibleModelsStatus": 200,
+    "reviewTokenProposeModelStatus": 403,
+    "reviewVisibleModels": [
+      "qwen3.5:35b"
+    ],
+    "reviewVisibleModelsStatus": 200,
+    "subjectModelIsolationConfirmed": true,
+    "unknownModelHttpStatus": 404,
+    "withoutJwtHttpStatus": 401
+  },
+  "completedAtUtc": "2026-11-14T05:33:38.837222+00:00",
+  "developerToolGovernedByGateway": false,
+  "gatewayVersion": "1.6.0",
+  "gooseVersion": "1.54.0",
+  "langfuseReadbackConfirmed": false,
+  "modelCatalog": [
+    "qwen3:8b",
+    "qwen3.5:35b"
+  ],
+  "otlpRecipient": "local_inspection_receiver",
+  "publishable": false,
+  "receiverIsLangfuse": false,
+  "runIdHeaderIsAuthorization": false,
+  "stages": {
+    "propose": {
+      "durationMs": 240243,
+      "exitCode": 2,
+      "reason": "unclassified_stage_failure",
+      "status": "blocked",
+      "timedOut": false
+    }
+  },
+  "startedAtUtc": "2026-11-14T05:29:30.981779+00:00",
+  "traces": {
+    "propose": {
+      "expectedModelObserved": true,
+      "knownContentAttributeNameSeen": false,
+      "parentLinked": true,
+      "spanCount": 9,
+      "traceId": "c79c82f052132c4de3a865dac8eb4adf"
+    }
+  },
+  "trialPassed": false
+}
