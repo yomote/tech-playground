@@ -2,6 +2,12 @@
 
 `security_loop.py`は、GitHubのCVE watchが保存したOSV SARIFとDependabot alertを照合し、**一件のnpm依存脆弱性**を選ぶ。Gooseに修正候補を作らせ、別の一時作業ツリーで検査と再走査を行い、Developer拡張を持たない別のGoose実行で差分をレビューする。`validate`はコミット済みPR候補を同じ構造条件で再検査する。結果は段階別JSONに保存する。PR作成、GitHub上の正式レビュー、承認、merge、配備はこのCLIの機能ではない。
 
+## 人の実影響判定と自動マージの境界
+
+[Goose Security Agent workflow](../../.github/workflows/goose-security-agent.yml) は修正PRを下書きで作り、`review-and-merge` JobをGitHub Environment `blue-security-impact` の承認待ちにする。Repository variable `BLUE_IMPACT_REVIEWER_LOGIN`に実影響判定担当のGitHub個人アカウントを設定し、Environmentのrequired reviewersを**その個人1名のみ**にする。未設定・別アカウント・botの場合は[`impact_gate.py`](impact_gate.py)が停止する。GitHubのprevent self reviewを有効にすると、定期runの起動者と同じアカウントはEnvironmentを承認できない。担当者を決める際は実runのactorを確認する。Environmentの管理設定、mainのactive no-bypass ruleset、自動merge許可、分離したbot/policy/reviewer資格はまだ実環境へ投入していない。
+
+担当者はPR本文に表示される`BLUE_IMPACT_V1`のJSONをコピーし、配備版と到達する入口を確認したうえで、`impact`、`decision`、`evidenceUrl`、`rationale`を記入して**新しいPRコメント**を投稿する。`impact`は`confirmed`または`potential`、`decision`は`fix_required`のときだけ後段へ進む。`unknown`、対象外、根拠欠落では止める。コメントには当該case ID・選定ケースのSHA-256・PR head SHAが入る。コメント投稿後、担当者が保留中のEnvironmentを承認すると同じrunが再開する。ワークフローはGitHub APIで投稿者・Environment設定・ケース・headを照合し、CI待機後とmerge直前に同じコメントID・本文hashを再確認する。変更されたPR head、編集済みコメント、複数の有効コメントは拒否する。GitHubで確認できるのは**指定した人が理由と根拠を明示した事実**であり、記述された実影響の正しさを機械的に証明するものではない。Environment未設定の現状ではJobはここで停止し、実PRの自動merge成立証拠はない。
+
 入力を同じGitHub main commitに固定する。OSVの`evidence.json`に記録されたcommit、lockfile SHA-256、SARIF SHA-256、scanner版と実体SHA-256、検出行数を照合する。Dependabot alertは`open`、npm package名・GHSA/CVEがSARIFと一致し、`first_patched_version.identifier`が導入版より新しい場合だけ候補になる。その固定版が[npm公式Registry API](https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md)で公開済みであることも確認する。404なら次候補へ進み、API障害時は選定を停止する。修正版がない場合や、同じadvisoryのPRが既に開いている場合は停止する。自由文に書かれた「修正版」をGooseが選ぶことは認めない。
 
 ## 入力と実行

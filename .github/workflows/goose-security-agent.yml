@@ -32,6 +32,7 @@ jobs:
     outputs:
       candidate: ${{ steps.choose.outputs.candidate }}
       case_sha256: ${{ steps.choose.outputs.case_sha256 }}
+      case_id: ${{ steps.choose.outputs.case_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -142,6 +143,9 @@ jobs:
             echo 'candidate=true' >> "$GITHUB_OUTPUT"
             case_sha256=$(sha256sum "$CASE_DIR/case.json" | cut -d' ' -f1)
             echo "case_sha256=$case_sha256" >> "$GITHUB_OUTPUT"
+            case_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["caseId"])' "$CASE_DIR/case.json")
+            [[ "$case_id" =~ ^BT-[0-9a-f]{16}$ ]]
+            echo "case_id=$case_id" >> "$GITHUB_OUTPUT"
           elif [[ "$result" == 2 ]]; then
             CASE_DIR="$CASE_DIR" python3 - <<'PY'
           import json, os
@@ -438,6 +442,31 @@ jobs:
           git config user.email "${bot_login}@users.noreply.github.com"
           git commit -m 'fix(security): update one vulnerable dependency'
           head=$(git rev-parse HEAD)
+          PR_HEAD="$head" CASE_DIR="$CASE_DIR" python3 - <<'PYBODY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['CASE_DIR'])
+          case = json.loads((root / 'case.json').read_text())
+          template = {
+              'caseId': case['caseId'],
+              'caseSha256': hashlib.sha256((root / 'case.json').read_bytes()).hexdigest(),
+              'prHeadSha': os.environ['PR_HEAD'],
+              'impact': 'unknown', 'decision': 'pending',
+              'evidenceUrl': '', 'rationale': '',
+          }
+          with (root / 'pr-body.md').open('a') as body:
+              body.write(
+                  '\nHuman impact assessment is required before merge. A named person must post '
+                  'a new PR comment after examining the actual deployment and affected entrypoint. '
+                  'Replace the four placeholder values below. Valid impact values are '
+                  '`confirmed` or `potential`; decision must be `fix_required`.\n\n'
+                  '```text\nBLUE_IMPACT_V1\n'
+                  + json.dumps(template, separators=(',', ':'))
+                  + '\n```\n\n'
+                  f'After commenting, approve the pending `blue-security-impact` Environment '
+                  f'on [this Actions run](https://github.com/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{os.environ["GITHUB_RUN_ID"]}).\n'
+              )
+          PYBODY
           gh auth setup-git --hostname github.com
           # Empty expected lease means the bot cannot replace an existing branch.
           git push --force-with-lease="refs/heads/$branch:" origin "HEAD:refs/heads/$branch"
@@ -452,13 +481,41 @@ jobs:
           echo "bot_login=$bot_login" >> "$GITHUB_OUTPUT"
 
   review-and-merge:
-    needs: publish
+    needs: [select, publish]
+    # The named human can comment on the created PR while this job waits.
+    # Missing or weakened environment protection is rejected in impact_gate.py.
+    environment: blue-security-impact
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    permissions: {}
+    permissions:
+      contents: read
     outputs:
       merge_sha: ${{ steps.merge.outputs.merge_sha }}
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Require named human impact decision for this case and PR head
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          POLICY_TOKEN: ${{ secrets.BLUE_POLICY_TOKEN }}
+          REVIEWER_TOKEN: ${{ secrets.BLUE_REVIEWER_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
+          CASE_ID: ${{ needs.select.outputs.case_id }}
+          CASE_SHA256: ${{ needs.select.outputs.case_sha256 }}
+          ASSESSOR_LOGIN: ${{ vars.BLUE_IMPACT_REVIEWER_LOGIN }}
+        run: |
+          set -euo pipefail
+          test -n "$ASSESSOR_LOGIN"
+          python3 demos/blue-team-agent/impact_gate.py \
+            --repository "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" \
+            --case-id "$CASE_ID" --case-sha256 "$CASE_SHA256" \
+            --pr-head "$PR_HEAD" --assessor-login "$ASSESSOR_LOGIN" \
+            --bot-login "$BOT_LOGIN" --out "$RUNNER_TEMP/blue-impact.json"
       - name: Require live protection and unchanged draft PR
         shell: bash
         env:
@@ -586,6 +643,26 @@ jobs:
           current=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
           draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .draft)
           test "$current" = "$PR_HEAD" && test "$draft" = false
+      - name: Recheck unchanged human impact decision before formal review
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          POLICY_TOKEN: ${{ secrets.BLUE_POLICY_TOKEN }}
+          REVIEWER_TOKEN: ${{ secrets.BLUE_REVIEWER_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
+          CASE_ID: ${{ needs.select.outputs.case_id }}
+          CASE_SHA256: ${{ needs.select.outputs.case_sha256 }}
+          ASSESSOR_LOGIN: ${{ vars.BLUE_IMPACT_REVIEWER_LOGIN }}
+        run: |
+          set -euo pipefail
+          python3 demos/blue-team-agent/impact_gate.py \
+            --repository "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" \
+            --case-id "$CASE_ID" --case-sha256 "$CASE_SHA256" \
+            --pr-head "$PR_HEAD" --assessor-login "$ASSESSOR_LOGIN" \
+            --bot-login "$BOT_LOGIN" --out "$RUNNER_TEMP/blue-impact.json" \
+            --expect "$RUNNER_TEMP/blue-impact.json"
       - name: Formal approval by a distinct GitHub reviewer
         shell: bash
         env:
@@ -611,6 +688,26 @@ jobs:
             -f event=APPROVE -f commit_id="$PR_HEAD" \
             -f body='Independent GitHub approval after the pinned OSV rescan, focused checks, separate Goose review, and required PR CI passed.' \
             --jq '.state' | grep -x APPROVED
+      - name: Recheck unchanged human impact decision before merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BLUE_BOT_TOKEN }}
+          POLICY_TOKEN: ${{ secrets.BLUE_POLICY_TOKEN }}
+          REVIEWER_TOKEN: ${{ secrets.BLUE_REVIEWER_TOKEN }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr }}
+          PR_HEAD: ${{ needs.publish.outputs.head }}
+          BOT_LOGIN: ${{ needs.publish.outputs.bot_login }}
+          CASE_ID: ${{ needs.select.outputs.case_id }}
+          CASE_SHA256: ${{ needs.select.outputs.case_sha256 }}
+          ASSESSOR_LOGIN: ${{ vars.BLUE_IMPACT_REVIEWER_LOGIN }}
+        run: |
+          set -euo pipefail
+          python3 demos/blue-team-agent/impact_gate.py \
+            --repository "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" \
+            --case-id "$CASE_ID" --case-sha256 "$CASE_SHA256" \
+            --pr-head "$PR_HEAD" --assessor-login "$ASSESSOR_LOGIN" \
+            --bot-login "$BOT_LOGIN" --out "$RUNNER_TEMP/blue-impact.json" \
+            --expect "$RUNNER_TEMP/blue-impact.json"
       - name: Merge only the reviewed head under the live main ruleset
         id: merge
         shell: bash
